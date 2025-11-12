@@ -20,6 +20,10 @@ class DataService: ObservableObject {
     @Published var repayments: [Repayment] = []
     @Published var transfers: [Transfer] = []
     @Published var savingsBudgets: [SavingsBudget] = []
+    @Published var salaryIncomes: [SalaryIncome] = []
+    @Published var incomeTransactions: [IncomeTransaction] = []
+    @Published var actionItems: [ActionItem] = []
+    @Published var friendIOUs: [FriendIOU] = []
     
     private let useRemoteDB: Bool
     private var remoteDBConfig: RemoteDBConfig?
@@ -86,7 +90,18 @@ class DataService: ObservableObject {
     
     func updateAccountBalance(_ accountId: UUID, by amount: Double) {
         if let index = accounts.firstIndex(where: { $0.id == accountId }) {
-            accounts[index].balance += amount
+            let account = accounts[index]
+            
+            if account.isCreditCard {
+                // For credit cards: spending increases usage (makes balance more negative)
+                // Payments decrease usage (makes balance less negative or positive)
+                // Amount is negative for expenses, positive for payments
+                accounts[index].balance += amount
+            } else {
+                // For regular accounts: normal balance adjustment
+                accounts[index].balance += amount
+            }
+            
             saveToLocalStorage()
         }
     }
@@ -97,7 +112,19 @@ class DataService: ObservableObject {
         if let index = budgetCategories.firstIndex(where: { $0.id == category.id }) {
             budgetCategories[index] = category
         } else {
-            budgetCategories.append(category)
+            // Calculate existing spending for this category/month/year
+            let existingExpenses = expenses.filter {
+                $0.userId == category.userId &&
+                $0.categoryName == category.name &&
+                Calendar.current.component(.month, from: $0.date) == category.month &&
+                Calendar.current.component(.year, from: $0.date) == category.year
+            }
+            let existingSpent = existingExpenses.reduce(0) { $0 + $1.userShare }
+            
+            // Create new category with existing spending
+            var newCategory = category
+            newCategory.spent = existingSpent
+            budgetCategories.append(newCategory)
         }
         saveToLocalStorage()
     }
@@ -157,6 +184,30 @@ class DataService: ObservableObject {
             // Update balances owed
             updateBalancesOwed(from: expense)
         }
+        saveToLocalStorage()
+    }
+    
+    func updateExpense(_ updatedExpense: Expense) {
+        guard let index = expenses.firstIndex(where: { $0.id == updatedExpense.id }) else {
+            // If expense doesn't exist, treat as new
+            saveExpense(updatedExpense)
+            return
+        }
+        
+        let oldExpense = expenses[index]
+        
+        // Reverse old expense effects
+        updateAccountBalance(oldExpense.accountId, by: oldExpense.userShare)
+        updateBudgetSpending(for: oldExpense.userId, category: oldExpense.categoryName, amount: -oldExpense.userShare, date: oldExpense.date)
+        reverseBalancesOwed(from: oldExpense)
+        
+        // Apply new expense effects
+        updateAccountBalance(updatedExpense.accountId, by: -updatedExpense.userShare)
+        updateBudgetSpending(for: updatedExpense.userId, category: updatedExpense.categoryName, amount: updatedExpense.userShare, date: updatedExpense.date)
+        updateBalancesOwed(from: updatedExpense)
+        
+        // Update the expense
+        expenses[index] = updatedExpense
         saveToLocalStorage()
     }
     
@@ -275,6 +326,21 @@ class DataService: ObservableObject {
         saveToLocalStorage()
     }
     
+    func reverseBalancesOwed(from expense: Expense) {
+        for participant in expense.splitParticipants where !participant.isCurrentUser {
+            if let index = balancesOwed.firstIndex(where: { $0.userId == expense.userId && $0.personName == participant.name }) {
+                balancesOwed[index].amount -= participant.amount
+                balancesOwed[index].lastUpdated = Date()
+                
+                // Remove if balance is zero or negative
+                if balancesOwed[index].amount <= 0 {
+                    balancesOwed.remove(at: index)
+                }
+            }
+        }
+        saveToLocalStorage()
+    }
+    
     func recordRepayment(_ repayment: Repayment) {
         repayments.append(repayment)
         
@@ -328,6 +394,273 @@ class DataService: ObservableObject {
         transfers.filter { $0.userId == userId }
     }
     
+    // MARK: - Salary Income Operations
+    
+    func saveSalaryIncome(_ salary: SalaryIncome) {
+        if let index = salaryIncomes.firstIndex(where: { $0.id == salary.id }) {
+            salaryIncomes[index] = salary
+        } else {
+            salaryIncomes.append(salary)
+        }
+        saveToLocalStorage()
+    }
+    
+    func getSalaryIncomes(for userId: UUID) -> [SalaryIncome] {
+        salaryIncomes.filter { $0.userId == userId && $0.isActive }
+    }
+    
+    func deleteSalaryIncome(_ salary: SalaryIncome) {
+        salaryIncomes.removeAll { $0.id == salary.id }
+        saveToLocalStorage()
+    }
+    
+    func confirmSalaryDeposit(_ salary: SalaryIncome, amount: Double? = nil, date: Date = Date()) {
+        let depositAmount = amount ?? salary.amount
+        
+        // Create income transaction as an Expense with positive amount
+        let expense = Expense(
+            userId: salary.userId,
+            amount: depositAmount,
+            date: date,
+            description: "Salary Deposit",
+            categoryName: "Income",
+            accountId: salary.accountId,
+            isSubscription: false
+        )
+        
+        // Update account balance (add money)
+        updateAccountBalance(salary.accountId, by: depositAmount)
+        
+        // Save expense record
+        expenses.append(expense)
+        
+        // Create income transaction record
+        let incomeTransaction = IncomeTransaction(
+            userId: salary.userId,
+            salaryId: salary.id,
+            amount: depositAmount,
+            accountId: salary.accountId,
+            date: date
+        )
+        incomeTransactions.append(incomeTransaction)
+        
+        // Update next expected date
+        if let index = salaryIncomes.firstIndex(where: { $0.id == salary.id }) {
+            salaryIncomes[index].nextExpectedDate = salary.calculateNextDate(from: date)
+        }
+        
+        // Remove salary action item
+        actionItems.removeAll { $0.type == .salaryPending && $0.relatedEntityId == salary.id }
+        
+        saveToLocalStorage()
+    }
+    
+    func getIncomeTransactions(for userId: UUID) -> [IncomeTransaction] {
+        incomeTransactions.filter { $0.userId == userId }
+    }
+    
+    // MARK: - Action Item Operations
+    
+    func createActionItem(_ item: ActionItem) {
+        // Check if similar item already exists
+        let exists = actionItems.contains { existingItem in
+            existingItem.userId == item.userId &&
+            existingItem.type == item.type &&
+            existingItem.relatedEntityId == item.relatedEntityId &&
+            !existingItem.isDismissed
+        }
+        
+        if !exists {
+            actionItems.append(item)
+            saveToLocalStorage()
+        }
+    }
+    
+    func getActionItems(for userId: UUID) -> [ActionItem] {
+        actionItems.filter { $0.userId == userId && !$0.isDismissed }
+            .sorted { $0.priority.rawValue > $1.priority.rawValue }
+    }
+    
+    func dismissActionItem(_ item: ActionItem) {
+        if let index = actionItems.firstIndex(where: { $0.id == item.id }) {
+            actionItems[index].isDismissed = true
+            saveToLocalStorage()
+        }
+    }
+    
+    func generateActionItems(for userId: UUID) {
+        // Check for pending salaries
+        let salaries = getSalaryIncomes(for: userId)
+        for salary in salaries where salary.isDueSoon || salary.isOverdue {
+            let priority: ActionItemPriority = salary.isOverdue ? .high : .medium
+            let message = salary.isOverdue 
+                ? "Your salary was expected on \(salary.nextExpectedDate.formatted(date: .abbreviated, time: .omitted)). Confirm deposit?"
+                : "Salary expected on \(salary.nextExpectedDate.formatted(date: .abbreviated, time: .omitted))"
+            
+            let item = ActionItem(
+                userId: userId,
+                type: .salaryPending,
+                priority: priority,
+                title: "Salary Confirmation",
+                message: message,
+                relatedEntityId: salary.id
+            )
+            createActionItem(item)
+        }
+        
+        // Check for upcoming subscriptions
+        let subscriptions = getSubscriptions(for: userId)
+        for subscription in subscriptions where subscription.isDueSoon {
+            let item = ActionItem(
+                userId: userId,
+                type: .subscriptionDue,
+                priority: .medium,
+                title: "Subscription Due",
+                message: "\(subscription.name) - \(subscription.amount.formatAsCurrency()) due on \(subscription.nextDueDate.formatted(date: .abbreviated, time: .omitted))",
+                relatedEntityId: subscription.id
+            )
+            createActionItem(item)
+        }
+        
+        // Check for overspending
+        let now = Date()
+        let month = Calendar.current.component(.month, from: now)
+        let year = Calendar.current.component(.year, from: now)
+        let categories = getBudgetCategories(for: userId, month: month, year: year)
+        
+        for category in categories where category.spent > category.monthlyLimit {
+            let overage = category.spent - category.monthlyLimit
+            let item = ActionItem(
+                userId: userId,
+                type: .overspending,
+                priority: .high,
+                title: "Budget Exceeded",
+                message: "You're over budget in \(category.name) by \(overage.formatAsCurrency())",
+                relatedEntityId: category.id
+            )
+            createActionItem(item)
+        }
+        
+        // Check for friend balances
+        let balances = getBalancesOwed(for: userId)
+        for balance in balances where balance.amount > 50 { // Only show significant balances
+            let item = ActionItem(
+                userId: userId,
+                type: .friendBalance,
+                priority: .low,
+                title: "Outstanding Balance",
+                message: "\(balance.personName) owes you \(balance.amount.formatAsCurrency())",
+                relatedEntityId: balance.id
+            )
+            createActionItem(item)
+        }
+        
+        // Check for unsettled IOUs
+        let ious = getFriendIOUs(for: userId)
+        for iou in ious where !iou.isSettled && iou.amount > 20 {
+            let message = iou.direction == .owedToYou
+                ? "\(iou.personName) owes you \(iou.amount.formatAsCurrency())"
+                : "You owe \(iou.personName) \(iou.amount.formatAsCurrency())"
+            
+            let item = ActionItem(
+                userId: userId,
+                type: .friendBalance,
+                priority: .low,
+                title: "IOU Reminder",
+                message: message,
+                relatedEntityId: iou.id
+            )
+            createActionItem(item)
+        }
+    }
+    
+    // MARK: - Friend IOU Operations
+    
+    func saveFriendIOU(_ iou: FriendIOU) {
+        if let index = friendIOUs.firstIndex(where: { $0.id == iou.id }) {
+            friendIOUs[index] = iou
+        } else {
+            friendIOUs.append(iou)
+        }
+        saveToLocalStorage()
+    }
+    
+    func getFriendIOUs(for userId: UUID) -> [FriendIOU] {
+        friendIOUs.filter { $0.userId == userId }
+    }
+    
+    func getActiveFriendIOUs(for userId: UUID) -> [FriendIOU] {
+        friendIOUs.filter { $0.userId == userId && !$0.isSettled }
+    }
+    
+    func settleFriendIOU(_ iou: FriendIOU) {
+        if let index = friendIOUs.firstIndex(where: { $0.id == iou.id }) {
+            friendIOUs[index].isSettled = true
+            friendIOUs[index].settledDate = Date()
+            saveToLocalStorage()
+        }
+    }
+    
+    func deleteFriendIOU(_ iou: FriendIOU) {
+        friendIOUs.removeAll { $0.id == iou.id }
+        saveToLocalStorage()
+    }
+    
+    // MARK: - Balance Reconciliation
+    
+    func reconcileAccount(_ account: Account, actualBalance: Double, notes: String = "") {
+        let difference = actualBalance - account.balance
+        
+        guard abs(difference) > 0.01 else { return } // Ignore tiny differences
+        
+        // Create reconciliation adjustment expense
+        let expense = Expense(
+            userId: account.userId,
+            amount: abs(difference),
+            date: Date(),
+            description: "Balance Reconciliation: \(notes.isEmpty ? "Adjustment" : notes)",
+            categoryName: "Reconciliation",
+            accountId: account.id,
+            isSubscription: false
+        )
+        
+        expenses.append(expense)
+        
+        // Update account balance to match actual
+        if let index = accounts.firstIndex(where: { $0.id == account.id }) {
+            accounts[index].balance = actualBalance
+        }
+        
+        saveToLocalStorage()
+    }
+    
+    // MARK: - Settle Up Function
+    
+    func settleUpBalance(userId: UUID, personName: String, notes: String = "") {
+        // Find balance for this person
+        if let index = balancesOwed.firstIndex(where: { $0.userId == userId && $0.personName == personName }) {
+            let balance = balancesOwed[index]
+            
+            // Create repayment record for the full amount
+            let repayment = Repayment(
+                userId: userId,
+                personName: personName,
+                amount: balance.amount,
+                date: Date(),
+                notes: notes.isEmpty ? "Settled up" : notes
+            )
+            repayments.append(repayment)
+            
+            // Remove the balance
+            balancesOwed.remove(at: index)
+            
+            // Remove related action items
+            actionItems.removeAll { $0.userId == userId && $0.type == .friendBalance }
+            
+            saveToLocalStorage()
+        }
+    }
+    
     // MARK: - Local Storage
     
     private func saveToLocalStorage() {
@@ -340,6 +673,10 @@ class DataService: ObservableObject {
         saveData(repayments, forKey: "repayments")
         saveData(transfers, forKey: "transfers")
         saveData(savingsBudgets, forKey: "savingsBudgets")
+        saveData(salaryIncomes, forKey: "salaryIncomes")
+        saveData(incomeTransactions, forKey: "incomeTransactions")
+        saveData(actionItems, forKey: "actionItems")
+        saveData(friendIOUs, forKey: "friendIOUs")
     }
     
     private func loadLocalData() {
@@ -352,6 +689,10 @@ class DataService: ObservableObject {
         repayments = loadData(forKey: "repayments") ?? []
         transfers = loadData(forKey: "transfers") ?? []
         savingsBudgets = loadData(forKey: "savingsBudgets") ?? []
+        salaryIncomes = loadData(forKey: "salaryIncomes") ?? []
+        incomeTransactions = loadData(forKey: "incomeTransactions") ?? []
+        actionItems = loadData(forKey: "actionItems") ?? []
+        friendIOUs = loadData(forKey: "friendIOUs") ?? []
     }
     
     private func saveData<T: Codable>(_ data: T, forKey key: String) {

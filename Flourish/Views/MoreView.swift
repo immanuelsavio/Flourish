@@ -8,49 +8,47 @@
 import SwiftUI
 
 struct MoreView: View {
+    @Environment(\.showProfileMenu) var showProfileMenu
     @StateObject private var authService = AuthenticationService.shared
     
     var body: some View {
-        NavigationView {
-            List {
-                Section(header: Text("Accounts")) {
-                    NavigationLink(destination: AccountsListView()) {
-                        Label("Manage Accounts", systemImage: "creditcard.fill")
-                    }
-                }
-                
-                Section(header: Text("Subscriptions")) {
-                    NavigationLink(destination: SubscriptionsListView()) {
-                        Label("Manage Subscriptions", systemImage: "arrow.clockwise")
-                    }
-                }
-                
-                Section(header: Text("Reports")) {
-                    NavigationLink(destination: MonthlyReportView()) {
-                        Label("Monthly Reports", systemImage: "chart.bar.fill")
-                    }
-                }
-                
-                Section(header: Text("Account")) {
-                    if let user = authService.currentUser {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(user.name)
-                                .font(.headline)
-                            Text(user.email)
-                                .font(.caption)
-                                .foregroundColor(.gray)
-                        }
-                    }
-                    
-                    Button(action: {
-                        authService.logout()
-                    }) {
-                        Label("Logout", systemImage: "rectangle.portrait.and.arrow.right")
-                            .foregroundColor(.red)
-                    }
+        List {
+            Section(header: Text("Income & Expenses")) {
+                NavigationLink(destination: SalaryManagementView()) {
+                    Label("Salary & Income", systemImage: "banknote.fill")
                 }
             }
-            .navigationTitle("More")
+            
+            Section(header: Text("Manage")) {
+                NavigationLink(destination: AccountsListView()) {
+                    Label("Manage Accounts", systemImage: "creditcard.fill")
+                }
+                
+                NavigationLink(destination: SubscriptionsListView()) {
+                    Label("Manage Subscriptions", systemImage: "arrow.clockwise")
+                }
+                
+                NavigationLink(destination: TransferListView()) {
+                    Label("Account Transfers", systemImage: "arrow.left.arrow.right")
+                }
+                
+                NavigationLink(destination: SavingsBudgetView()) {
+                    Label("Savings Goals", systemImage: "chart.line.uptrend.xyaxis")
+                }
+                
+                NavigationLink(destination: MonthlyReportView()) {
+                    Label("Monthly Reports", systemImage: "chart.bar.fill")
+                }
+            }
+        }
+        .navigationTitle("More")
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button(action: { showProfileMenu.wrappedValue = true }) {
+                    Image(systemName: "line.3.horizontal")
+                        .font(.title3)
+                }
+            }
         }
     }
 }
@@ -78,20 +76,45 @@ struct AccountsListView: View {
                 } else {
                     List {
                         ForEach(accounts) { account in
-                            HStack {
-                                VStack(alignment: .leading) {
-                                    Text(account.name)
-                                        .font(.headline)
-                                    Text(account.type.rawValue)
-                                        .font(.caption)
-                                        .foregroundColor(.gray)
+                            NavigationLink(destination: EditAccountView(account: account)) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    HStack {
+                                        Text(account.name)
+                                            .font(.headline)
+                                        
+                                        Spacer()
+                                        
+                                        if account.isCreditCard {
+                                            Text(formatCurrency(abs(account.balance)))
+                                                .font(.headline)
+                                                .foregroundColor(.red)
+                                        } else {
+                                            Text(formatCurrency(account.balance))
+                                                .font(.headline)
+                                                .foregroundColor(.green)
+                                        }
+                                    }
+                                    
+                                    HStack {
+                                        Text(account.type.rawValue)
+                                            .font(.caption)
+                                            .foregroundColor(.gray)
+                                        
+                                        if account.isCreditCard, let limit = account.creditLimit {
+                                            Spacer()
+                                            let used = abs(account.balance)
+                                            let percent = (used / limit) * 100
+                                            let available = limit - used
+                                            
+                                            HStack(spacing: 4) {
+                                                Text("Available: \(available.formatAsCurrency())")
+                                                Text("(\(String(format: "%.0f%%", percent)) used)")
+                                            }
+                                            .font(.caption)
+                                            .foregroundColor(account.isOverCreditWarning ? .orange : .gray)
+                                        }
+                                    }
                                 }
-                                
-                                Spacer()
-                                
-                                Text(formatCurrency(account.balance))
-                                    .font(.headline)
-                                    .foregroundColor(account.isCreditCard ? .red : .green)
                             }
                         }
                         .onDelete(perform: deleteAccounts)
@@ -122,10 +145,7 @@ struct AccountsListView: View {
     }
     
     private func formatCurrency(_ amount: Double) -> String {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .currency
-        formatter.currencySymbol = "$"
-        return formatter.string(from: NSNumber(value: amount)) ?? "$0.00"
+        amount.formatAsCurrency()
     }
 }
 
@@ -137,6 +157,8 @@ struct AddAccountView: View {
     @State private var name = ""
     @State private var type: AccountType = .checking
     @State private var balance = ""
+    @State private var creditLimit = ""
+    @State private var creditWarningPercent = ""
     
     var body: some View {
         NavigationView {
@@ -150,8 +172,22 @@ struct AddAccountView: View {
                         }
                     }
                     
-                    TextField("Starting Balance", text: $balance)
+                    TextField(type == .creditCard ? "Starting Balance (0 for new card)" : "Starting Balance", text: $balance)
                         .keyboardType(.decimalPad)
+                }
+                
+                if type == .creditCard {
+                    Section(header: Text("Credit Card Settings")) {
+                        TextField("Credit Limit ($)", text: $creditLimit)
+                            .keyboardType(.decimalPad)
+                        
+                        TextField("Warning at % Usage (Optional)", text: $creditWarningPercent)
+                            .keyboardType(.numberPad)
+                        
+                        Text("Enter the percentage at which you want to be warned (e.g., 80 for 80%)")
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                    }
                 }
             }
             .navigationTitle("Add Account")
@@ -167,10 +203,22 @@ struct AddAccountView: View {
                     Button("Save") {
                         saveAccount()
                     }
-                    .disabled(name.isEmpty || balance.isEmpty)
+                    .disabled(!isFormValid)
                 }
             }
         }
+    }
+    
+    private var isFormValid: Bool {
+        if name.isEmpty || balance.isEmpty {
+            return false
+        }
+        
+        if type == .creditCard && creditLimit.isEmpty {
+            return false
+        }
+        
+        return true
     }
     
     private func saveAccount() {
@@ -181,10 +229,116 @@ struct AddAccountView: View {
             userId: userId,
             name: name,
             type: type,
-            balance: accountBalance
+            balance: accountBalance,
+            creditLimit: type == .creditCard ? Double(creditLimit) : nil,
+            creditUsageWarning: type == .creditCard ? Double(creditWarningPercent) : nil
         )
         
         dataService.saveAccount(account)
+        dismiss()
+    }
+}
+
+// MARK: - Edit Account View
+
+struct EditAccountView: View {
+    @Environment(\.dismiss) var dismiss
+    @EnvironmentObject var dataService: DataService
+    
+    let account: Account
+    
+    @State private var name = ""
+    @State private var balance = ""
+    @State private var creditLimit = ""
+    @State private var creditWarningPercent = ""
+    
+    var body: some View {
+        Form {
+            Section(header: Text("Account Details")) {
+                TextField("Account Name", text: $name)
+                
+                Text(account.type.rawValue)
+                    .foregroundColor(.gray)
+                
+                TextField(account.isCreditCard ? "Current Balance (Negative = Used)" : "Current Balance", text: $balance)
+                    .keyboardType(.decimalPad)
+            }
+            
+            if account.isCreditCard {
+                Section(header: Text("Credit Card Settings")) {
+                    TextField("Credit Limit ($)", text: $creditLimit)
+                        .keyboardType(.decimalPad)
+                    
+                    TextField("Warning at % Usage (Optional)", text: $creditWarningPercent)
+                        .keyboardType(.numberPad)
+                    
+                    if let limit = Double(creditLimit), limit > 0 {
+                        if let bal = Double(balance) {
+                            let used = abs(bal)
+                            let available = limit - used
+                            let percent = (used / limit) * 100
+                            
+                            VStack(alignment: .leading, spacing: 8) {
+                                HStack {
+                                    Text("Used:")
+                                    Spacer()
+                                    Text(used.formatAsCurrency())
+                                }
+                                HStack {
+                                    Text("Available:")
+                                    Spacer()
+                                    Text(available.formatAsCurrency())
+                                        .foregroundColor(available < 0 ? .red : .green)
+                                }
+                                HStack {
+                                    Text("Usage:")
+                                    Spacer()
+                                    Text(String(format: "%.1f%%", percent))
+                                        .foregroundColor(percent > 80 ? .red : percent > 60 ? .orange : .green)
+                                }
+                            }
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                        }
+                    }
+                }
+            }
+        }
+        .navigationTitle("Edit Account")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button("Save") {
+                    saveChanges()
+                }
+                .disabled(name.isEmpty || balance.isEmpty)
+            }
+        }
+        .onAppear {
+            name = account.name
+            balance = String(account.balance)
+            if let limit = account.creditLimit {
+                creditLimit = String(limit)
+            }
+            if let warning = account.creditUsageWarning {
+                creditWarningPercent = String(Int(warning))
+            }
+        }
+    }
+    
+    private func saveChanges() {
+        guard let accountBalance = Double(balance) else { return }
+        
+        var updatedAccount = account
+        updatedAccount.name = name
+        updatedAccount.balance = accountBalance
+        
+        if account.isCreditCard {
+            updatedAccount.creditLimit = Double(creditLimit)
+            updatedAccount.creditUsageWarning = Double(creditWarningPercent)
+        }
+        
+        dataService.saveAccount(updatedAccount)
         dismiss()
     }
 }
@@ -260,16 +414,11 @@ struct SubscriptionsListView: View {
     }
     
     private func formatCurrency(_ amount: Double) -> String {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .currency
-        formatter.currencySymbol = "$"
-        return formatter.string(from: NSNumber(value: amount)) ?? "$0.00"
+        amount.formatAsCurrency()
     }
     
     private func formatDate(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        return formatter.string(from: date)
+        date.formatted()
     }
 }
 
@@ -293,19 +442,7 @@ struct AddSubscriptionView: View {
                         .keyboardType(.decimalPad)
                     DatePicker("Next Due Date", selection: $nextDueDate, displayedComponents: .date)
                 }
-                
-                Section(header: Text("Transfers")) {
-                    NavigationLink(destination: TransferListView()) {
-                        Label("Account Transfers", systemImage: "arrow.left.arrow.right")
-                    }
-                }
 
-                Section(header: Text("Savings & Investments")) {
-                    NavigationLink(destination: SavingsBudgetView()) {
-                        Label("Savings Goals", systemImage: "chart.line.uptrend.xyaxis")
-                    }
-                }
-                
                 Section(header: Text("Category")) {
                     if let userId = authService.currentUser?.id {
                         let now = Date()
@@ -496,9 +633,7 @@ struct MonthlyReportView: View {
     }
     
     private func formatCurrency(_ amount: Double) -> String {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .currency
-        formatter.currencySymbol = "$"
-        return formatter.string(from: NSNumber(value: amount)) ?? "$0.00"
+        amount.formatAsCurrency()
     }
 }
+

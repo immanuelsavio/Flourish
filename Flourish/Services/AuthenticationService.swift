@@ -2,91 +2,97 @@
 //  AuthenticationService.swift
 //  FinanceApp
 //
-//  Service for handling user authentication
+//  Service for managing user authentication and profile updates
 //
 
 import Foundation
-import CryptoKit
 import Combine
 
 class AuthenticationService: ObservableObject {
     static let shared = AuthenticationService()
     
     @Published var currentUser: User?
-    @Published var isAuthenticated = false
+    @Published var isAuthenticated: Bool = false
     
     private let userDefaultsKey = "currentUserId"
+    private let usersKey = "registeredUsers"
     
     private init() {
-        loadSession()
+        loadCurrentUser()
     }
     
-    // Register a new user
-    func register(email: String, name: String, password: String) -> Result<User, AuthError> {
-        // Validate email format
-        guard isValidEmail(email) else {
-            return .failure(.invalidEmail)
+    // MARK: - Authentication
+    
+    func login(email: String, password: String) -> Bool {
+        guard let users = loadUsers(),
+              let user = users.first(where: { $0.email.lowercased() == email.lowercased() && $0.passwordHash == hashPassword(password) }) else {
+            return false
         }
         
-        // Check if user already exists
-        if DataService.shared.getUser(by: email) != nil {
-            return .failure(.userAlreadyExists)
-        }
-        
-        // Hash the password
-        let passwordHash = hashPassword(password)
-        
-        // Create new user
-        let user = User(email: email, name: name, passwordHash: passwordHash)
-        
-        // Save user
-        DataService.shared.saveUser(user)
-        
-        // Set as current user
         currentUser = user
         isAuthenticated = true
-        saveSession(userId: user.id)
-        
-        return .success(user)
+        saveCurrentUserId(user.id)
+        return true
     }
     
-    // Login existing user
-    func login(email: String, password: String) -> Result<User, AuthError> {
-        guard let user = DataService.shared.getUser(by: email) else {
-            return .failure(.userNotFound)
+    func register(name: String, email: String, password: String) -> Bool {
+        var users = loadUsers() ?? []
+        
+        // Check if email already exists
+        if users.contains(where: { $0.email.lowercased() == email.lowercased() }) {
+            return false
         }
         
-        // Verify password
-        let passwordHash = hashPassword(password)
-        guard user.passwordHash == passwordHash else {
-            return .failure(.invalidPassword)
-        }
+        let newUser = User(
+            email: email,
+            name: name,
+            passwordHash: hashPassword(password)
+        )
         
-        // Set as current user
-        currentUser = user
+        users.append(newUser)
+        saveUsers(users)
+        
+        // Auto-login after registration
+        currentUser = newUser
         isAuthenticated = true
-        saveSession(userId: user.id)
+        saveCurrentUserId(newUser.id)
         
-        return .success(user)
+        return true
     }
     
-    // Logout
     func logout() {
         currentUser = nil
         isAuthenticated = false
         UserDefaults.standard.removeObject(forKey: userDefaultsKey)
     }
     
-    // Save session
-    private func saveSession(userId: UUID) {
-        UserDefaults.standard.set(userId.uuidString, forKey: userDefaultsKey)
+    // MARK: - Profile Management
+    
+    func updateCurrentUser(name: String, email: String) {
+        guard var user = currentUser else { return }
+        
+        // Update user properties
+        user.name = name
+        user.email = email
+        
+        // Update in memory
+        currentUser = user
+        
+        // Update in persistent storage
+        var users = loadUsers() ?? []
+        if let index = users.firstIndex(where: { $0.id == user.id }) {
+            users[index] = user
+            saveUsers(users)
+        }
     }
     
-    // Load session on app launch
-    private func loadSession() {
+    // MARK: - Private Helpers
+    
+    private func loadCurrentUser() {
         guard let userIdString = UserDefaults.standard.string(forKey: userDefaultsKey),
               let userId = UUID(uuidString: userIdString),
-              let user = DataService.shared.getUser(by: userId) else {
+              let users = loadUsers(),
+              let user = users.first(where: { $0.id == userId }) else {
             return
         }
         
@@ -94,37 +100,27 @@ class AuthenticationService: ObservableObject {
         isAuthenticated = true
     }
     
-    // Simple password hashing (use proper encryption in production)
-    private func hashPassword(_ password: String) -> String {
-        let inputData = Data(password.utf8)
-        let hashed = SHA256.hash(data: inputData)
-        return hashed.compactMap { String(format: "%02x", $0) }.joined()
+    private func saveCurrentUserId(_ userId: UUID) {
+        UserDefaults.standard.set(userId.uuidString, forKey: userDefaultsKey)
     }
     
-    // Email validation
-    private func isValidEmail(_ email: String) -> Bool {
-        let emailRegex = "[A-Z0-9a-z._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,64}"
-        let emailPredicate = NSPredicate(format: "SELF MATCHES %@", emailRegex)
-        return emailPredicate.evaluate(with: email)
-    }
-}
-
-enum AuthError: Error, LocalizedError {
-    case invalidEmail
-    case userAlreadyExists
-    case userNotFound
-    case invalidPassword
-    
-    var errorDescription: String? {
-        switch self {
-        case .invalidEmail:
-            return "Invalid email format"
-        case .userAlreadyExists:
-            return "User with this email already exists"
-        case .userNotFound:
-            return "User not found"
-        case .invalidPassword:
-            return "Invalid password"
+    private func loadUsers() -> [User]? {
+        guard let data = UserDefaults.standard.data(forKey: usersKey),
+              let users = try? JSONDecoder().decode([User].self, from: data) else {
+            return nil
         }
+        return users
+    }
+    
+    private func saveUsers(_ users: [User]) {
+        if let data = try? JSONEncoder().encode(users) {
+            UserDefaults.standard.set(data, forKey: usersKey)
+        }
+    }
+    
+    private func hashPassword(_ password: String) -> String {
+        // In production, use proper password hashing (bcrypt, Argon2, etc.)
+        // This is just for demonstration
+        return password.data(using: .utf8)?.base64EncodedString() ?? password
     }
 }

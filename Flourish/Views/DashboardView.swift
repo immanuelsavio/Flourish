@@ -8,13 +8,23 @@
 import SwiftUI
 
 struct DashboardView: View {
+    @Environment(\.showProfileMenu) var showProfileMenu
     @EnvironmentObject var dataService: DataService
     @StateObject private var authService = AuthenticationService.shared
+    @State private var showActionCenter = false
     
     var body: some View {
         NavigationView {
             ScrollView {
                 VStack(spacing: 20) {
+                    // Action Center Alert Badge
+                    if let userId = authService.currentUser?.id {
+                        let actionCount = dataService.getActionItems(for: userId).count
+                        if actionCount > 0 {
+                            actionCenterBanner(count: actionCount)
+                        }
+                    }
+                    
                     // Account Summary
                     accountSummarySection
                     
@@ -30,13 +40,72 @@ struct DashboardView: View {
                 .padding()
             }
             .navigationTitle("Dashboard")
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button(action: { showProfileMenu.wrappedValue = true }) {
+                        Image(systemName: "line.3.horizontal")
+                            .font(.title3)
+                    }
+                }
+                
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(action: { showActionCenter = true }) {
+                        ZStack(alignment: .topTrailing) {
+                            Image(systemName: "bell.fill")
+                                .font(.title3)
+                            
+                            if let userId = authService.currentUser?.id {
+                                let actionCount = dataService.getActionItems(for: userId).count
+                                if actionCount > 0 {
+                                    Circle()
+                                        .fill(Color.red)
+                                        .frame(width: 8, height: 8)
+                                        .offset(x: 4, y: -4)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .sheet(isPresented: $showActionCenter) {
+                ActionCenterView()
+            }
             .onAppear {
                 // Process any due subscriptions
                 if let userId = authService.currentUser?.id {
                     dataService.processSubscriptions(for: userId)
+                    dataService.generateActionItems(for: userId)
                 }
             }
         }
+    }
+    
+    private func actionCenterBanner(count: Int) -> some View {
+        Button(action: { showActionCenter = true }) {
+            HStack {
+                Image(systemName: "bell.badge.fill")
+                    .font(.title3)
+                    .foregroundColor(.orange)
+                
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("\(count) Action\(count > 1 ? "s" : "") Needed")
+                        .font(.headline)
+                        .foregroundColor(.primary)
+                    Text("Tap to review")
+                        .font(.caption)
+                        .foregroundColor(.gray)
+                }
+                
+                Spacer()
+                
+                Image(systemName: "chevron.right")
+                    .foregroundColor(.gray)
+            }
+            .padding()
+            .background(Color.orange.opacity(0.1))
+            .cornerRadius(12)
+        }
+        .buttonStyle(.plain)
     }
     
     private var accountSummarySection: some View {
@@ -53,25 +122,40 @@ struct DashboardView: View {
                         .italic()
                 } else {
                     ForEach(accounts) { account in
-                        HStack {
-                            VStack(alignment: .leading) {
-                                Text(account.name)
-                                    .font(.subheadline)
-                                Text(account.type.rawValue)
+                        NavigationLink(destination: AccountTransactionsView(account: account)) {
+                            HStack {
+                                VStack(alignment: .leading) {
+                                    Text(account.name)
+                                        .font(.subheadline)
+                                    Text(account.type.rawValue)
+                                        .font(.caption)
+                                        .foregroundColor(.gray)
+                                }
+                                
+                                Spacer()
+                                
+                                VStack(alignment: .trailing) {
+                                    Text(formatCurrency(account.balance))
+                                        .font(.subheadline)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(account.isCreditCard ? .red : .green)
+                                    
+                                    if account.isCreditCard {
+                                        Text("Available: \(formatCurrency(account.creditAvailable))")
+                                            .font(.caption)
+                                            .foregroundColor(.gray)
+                                    }
+                                }
+                                
+                                Image(systemName: "chevron.right")
                                     .font(.caption)
                                     .foregroundColor(.gray)
                             }
-                            
-                            Spacer()
-                            
-                            Text(formatCurrency(account.balance))
-                                .font(.subheadline)
-                                .fontWeight(.semibold)
-                                .foregroundColor(account.isCreditCard ? .red : .green)
+                            .padding()
+                            .background(Color.gray.opacity(0.1))
+                            .cornerRadius(10)
                         }
-                        .padding()
-                        .background(Color.gray.opacity(0.1))
-                        .cornerRadius(10)
+                        .buttonStyle(.plain)
                     }
                 }
             }
@@ -143,24 +227,27 @@ struct DashboardView: View {
                         .italic()
                 } else {
                     ForEach(Array(expenses)) { expense in
-                        HStack {
-                            VStack(alignment: .leading) {
-                                Text(expense.description)
+                        NavigationLink(destination: ExpenseDetailView(expense: expense)) {
+                            HStack {
+                                VStack(alignment: .leading) {
+                                    Text(expense.description)
+                                        .font(.subheadline)
+                                    Text(expense.categoryName)
+                                        .font(.caption)
+                                        .foregroundColor(.gray)
+                                }
+                                
+                                Spacer()
+                                
+                                Text(formatCurrency(expense.userShare))
                                     .font(.subheadline)
-                                Text(expense.categoryName)
-                                    .font(.caption)
-                                    .foregroundColor(.gray)
+                                    .fontWeight(.semibold)
                             }
-                            
-                            Spacer()
-                            
-                            Text(formatCurrency(expense.userShare))
-                                .font(.subheadline)
-                                .fontWeight(.semibold)
+                            .padding()
+                            .background(Color.gray.opacity(0.1))
+                            .cornerRadius(10)
                         }
-                        .padding()
-                        .background(Color.gray.opacity(0.1))
-                        .cornerRadius(10)
+                        .buttonStyle(PlainButtonStyle())
                     }
                 }
             }
@@ -187,7 +274,7 @@ struct DashboardView: View {
                             VStack(alignment: .leading) {
                                 Text(subscription.name)
                                     .font(.subheadline)
-                                Text("Due: \(formatDate(subscription.nextDueDate))")
+                                Text("Due: \(subscription.nextDueDate.formatted())")
                                     .font(.caption)
                                     .foregroundColor(.orange)
                             }
@@ -208,15 +295,10 @@ struct DashboardView: View {
     }
     
     private func formatCurrency(_ amount: Double) -> String {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .currency
-        formatter.currencySymbol = "$"
-        return formatter.string(from: NSNumber(value: amount)) ?? "$0.00"
+        amount.formatAsCurrency()
     }
     
     private func formatDate(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        return formatter.string(from: date)
+        date.formatted()
     }
 }

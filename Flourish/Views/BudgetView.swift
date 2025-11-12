@@ -8,6 +8,7 @@
 import SwiftUI
 
 struct BudgetView: View {
+    @Environment(\.showProfileMenu) var showProfileMenu
     @EnvironmentObject var dataService: DataService
     @StateObject private var authService = AuthenticationService.shared
     @State private var selectedMonth: Int
@@ -44,7 +45,9 @@ struct BudgetView: View {
                     } else {
                         List {
                             ForEach(categories) { category in
-                                BudgetCategoryRow(category: category)
+                                NavigationLink(destination: EditBudgetCategoryView(category: category)) {
+                                    BudgetCategoryRow(category: category)
+                                }
                             }
                             .onDelete(perform: deleteCategories)
                         }
@@ -53,6 +56,13 @@ struct BudgetView: View {
             }
             .navigationTitle("Budget")
             .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button(action: { showProfileMenu.wrappedValue = true }) {
+                        Image(systemName: "line.3.horizontal")
+                            .font(.title3)
+                    }
+                }
+                
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(action: { showAddCategory = true }) {
                         Image(systemName: "plus")
@@ -73,7 +83,7 @@ struct BudgetView: View {
             
             Spacer()
             
-            Text("\(monthName(selectedMonth)) \(selectedYear)")
+            Text("\(monthName(selectedMonth)), \(selectedYear)")
                 .font(.headline)
             
             Spacer()
@@ -134,12 +144,17 @@ struct BudgetView: View {
 struct BudgetCategoryRow: View {
     let category: BudgetCategory
     @State private var showAddExpense = false
+    @State private var showCategoryExpenses = false
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text(category.name)
-                    .font(.headline)
+                Button(action: { showCategoryExpenses = true }) {
+                    Text(category.name)
+                        .font(.headline)
+                        .foregroundColor(.primary)
+                }
+                .buttonStyle(.plain)
                 
                 Spacer()
                 
@@ -160,24 +175,29 @@ struct BudgetCategoryRow: View {
                 }
             }
             
-            ProgressView(value: min(category.spent, category.monthlyLimit), total: category.monthlyLimit)
-                .tint(category.spent > category.monthlyLimit ? .red : .blue)
-            
-            Text("\(Int(category.percentUsed))% used")
-                .font(.caption)
-                .foregroundColor(.gray)
+            Button(action: { showCategoryExpenses = true }) {
+                VStack(spacing: 4) {
+                    ProgressView(value: min(category.spent, category.monthlyLimit), total: category.monthlyLimit)
+                        .tint(category.spent > category.monthlyLimit ? .red : .blue)
+                    
+                    Text("\(Int(category.percentUsed))% used")
+                        .font(.caption)
+                        .foregroundColor(.gray)
+                }
+            }
+            .buttonStyle(.plain)
         }
         .padding(.vertical, 4)
         .sheet(isPresented: $showAddExpense) {
             QuickAddExpenseView(preselectedCategory: category.name)
         }
+        .sheet(isPresented: $showCategoryExpenses) {
+            CategoryExpensesView(category: category)
+        }
     }
     
     private func formatCurrency(_ amount: Double) -> String {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .currency
-        formatter.currencySymbol = "$"
-        return formatter.string(from: NSNumber(value: amount)) ?? "$0.00"
+        amount.formatAsCurrency()
     }
 }
 
@@ -192,6 +212,7 @@ struct AddBudgetCategoryView: View {
     @State private var categoryName = ""
     @State private var monthlyLimit = ""
     @State private var showTemplates = false
+    @State private var showCustomInput = false
     
     // Predefined category templates
     let categoryTemplates = [
@@ -220,12 +241,32 @@ struct AddBudgetCategoryView: View {
         NavigationView {
             Form {
                 Section(header: Text("Category Details")) {
-                    HStack {
-                        TextField("Category Name", text: $categoryName)
-                        
-                        Button(action: { showTemplates = true }) {
-                            Image(systemName: "list.bullet")
-                                .foregroundColor(.blue)
+                    if showCustomInput {
+                        // Allow custom text input
+                        HStack {
+                            TextField("Custom Category Name", text: $categoryName)
+                            
+                            Button(action: {
+                                showCustomInput = false
+                                showTemplates = true
+                            }) {
+                                Text("Templates")
+                                    .font(.caption)
+                                    .foregroundColor(.blue)
+                            }
+                        }
+                    } else {
+                        // Show selected category or prompt to select
+                        HStack {
+                            Text(categoryName.isEmpty ? "Select a category..." : categoryName)
+                                .foregroundColor(categoryName.isEmpty ? .gray : .primary)
+                            
+                            Spacer()
+                            
+                            Button(action: { showTemplates = true }) {
+                                Image(systemName: "list.bullet")
+                                    .foregroundColor(.blue)
+                            }
                         }
                     }
                     
@@ -239,6 +280,7 @@ struct AddBudgetCategoryView: View {
                             Button(action: {
                                 categoryName = template
                                 showTemplates = false
+                                showCustomInput = false
                             }) {
                                 HStack {
                                     Text(template)
@@ -249,6 +291,22 @@ struct AddBudgetCategoryView: View {
                                             .foregroundColor(.blue)
                                     }
                                 }
+                            }
+                        }
+                        
+                        // Add "Custom" option at the bottom
+                        Button(action: {
+                            categoryName = ""
+                            showTemplates = false
+                            showCustomInput = true
+                        }) {
+                            HStack {
+                                Text("Custom Category...")
+                                    .foregroundColor(.blue)
+                                    .italic()
+                                Spacer()
+                                Image(systemName: "pencil")
+                                    .foregroundColor(.blue)
                             }
                         }
                     }
@@ -287,5 +345,171 @@ struct AddBudgetCategoryView: View {
         
         dataService.saveBudgetCategory(category)
         dismiss()
+    }
+}
+
+// MARK: - Edit Budget Category View
+
+struct EditBudgetCategoryView: View {
+    @Environment(\.dismiss) var dismiss
+    @EnvironmentObject var dataService: DataService
+    
+    let category: BudgetCategory
+    
+    @State private var categoryName = ""
+    @State private var monthlyLimit = ""
+    
+    var body: some View {
+        Form {
+            Section(header: Text("Category Details")) {
+                TextField("Category Name", text: $categoryName)
+                
+                TextField("Monthly Limit", text: $monthlyLimit)
+                    .keyboardType(.decimalPad)
+            }
+            
+            Section(header: Text("Current Spending")) {
+                HStack {
+                    Text("Spent")
+                    Spacer()
+                    Text(category.spent.formatAsCurrency())
+                        .foregroundColor(.gray)
+                }
+                
+                if let limit = Double(monthlyLimit) {
+                    HStack {
+                        Text("Remaining")
+                        Spacer()
+                        Text((limit - category.spent).formatAsCurrency())
+                            .foregroundColor(limit - category.spent < 0 ? .red : .green)
+                    }
+                }
+            }
+        }
+        .navigationTitle("Edit Budget")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button("Save") {
+                    saveChanges()
+                }
+                .disabled(categoryName.isEmpty || monthlyLimit.isEmpty)
+            }
+        }
+        .onAppear {
+            categoryName = category.name
+            monthlyLimit = String(category.monthlyLimit)
+        }
+    }
+    
+    private func saveChanges() {
+        guard let limit = Double(monthlyLimit) else { return }
+        
+        let updatedCategory = BudgetCategory(
+            id: category.id,
+            userId: category.userId,
+            name: categoryName,
+            monthlyLimit: limit,
+            month: category.month,
+            year: category.year,
+            spent: category.spent
+        )
+        
+        dataService.saveBudgetCategory(updatedCategory)
+        dismiss()
+    }
+}
+
+// MARK: - Category Expenses View
+
+struct CategoryExpensesView: View {
+    @Environment(\.dismiss) var dismiss
+    @EnvironmentObject var dataService: DataService
+    @StateObject private var authService = AuthenticationService.shared
+    
+    let category: BudgetCategory
+    
+    var body: some View {
+        NavigationView {
+            VStack {
+                if let userId = authService.currentUser?.id {
+                    let allExpenses = dataService.getExpenses(for: userId, month: category.month, year: category.year)
+                    let categoryExpenses = allExpenses.filter { $0.categoryName == category.name }.sorted { $0.date > $1.date }
+                    
+                    if categoryExpenses.isEmpty {
+                        VStack(spacing: 20) {
+                            Image(systemName: "doc.text.magnifyingglass")
+                                .font(.system(size: 60))
+                                .foregroundColor(.gray)
+                            Text("No expenses in \(category.name)")
+                                .font(.headline)
+                                .foregroundColor(.gray)
+                            Text("Expenses in this category will appear here")
+                                .font(.caption)
+                                .foregroundColor(.gray)
+                        }
+                    } else {
+                        List {
+                            Section(header: HStack {
+                                Text("Budget Summary")
+                                Spacer()
+                            }) {
+                                HStack {
+                                    Text("Spent")
+                                    Spacer()
+                                    Text(category.spent.formatAsCurrency())
+                                        .fontWeight(.semibold)
+                                }
+                                
+                                HStack {
+                                    Text("Budget")
+                                    Spacer()
+                                    Text(category.monthlyLimit.formatAsCurrency())
+                                        .foregroundColor(.gray)
+                                }
+                                
+                                HStack {
+                                    Text("Remaining")
+                                    Spacer()
+                                    Text(category.remaining.formatAsCurrency())
+                                        .fontWeight(.bold)
+                                        .foregroundColor(category.remaining < 0 ? .red : .green)
+                                }
+                            }
+                            
+                            Section(header: Text("Expenses (\(categoryExpenses.count))")) {
+                                ForEach(categoryExpenses) { expense in
+                                    NavigationLink(destination: ExpenseDetailView(expense: expense)) {
+                                        HStack {
+                                            VStack(alignment: .leading, spacing: 4) {
+                                                Text(expense.description)
+                                                    .font(.headline)
+                                                Text(expense.date.formatted())
+                                                    .font(.caption)
+                                                    .foregroundColor(.gray)
+                                            }
+                                            
+                                            Spacer()
+                                            
+                                            Text(expense.userShare.formatAsCurrency())
+                                                .font(.headline)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle(category.name)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+        }
     }
 }
