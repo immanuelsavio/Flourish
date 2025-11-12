@@ -6,14 +6,35 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		BA142E652EC404D30080FB37 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = BA142E642EC404D30080FB37 /* Assets.xcassets */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		BA910DFC2EC3F984001E651C /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = BA910DBD2EC3F6BC001E651C /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = BA910DC42EC3F6BC001E651C;
+			remoteInfo = FinanceApp;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
-		BA910DC52EC3F6BC001E651C /* FinanceApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FinanceApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		BA142E642EC404D30080FB37 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		BA910DC52EC3F6BC001E651C /* Flourish.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Flourish.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		BA910DF82EC3F984001E651C /* FlourishTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FlourishTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		BA910DC72EC3F6BC001E651C /* FinanceApp */ = {
+		BA910DC72EC3F6BC001E651C /* Flourish */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = FinanceApp;
+			path = Flourish;
+			sourceTree = "<group>";
+		};
+		BA910DF92EC3F984001E651C /* FlourishTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = FlourishTests;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -26,13 +47,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		BA910DF52EC3F984001E651C /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
 		BA910DBC2EC3F6BC001E651C = {
 			isa = PBXGroup;
 			children = (
-				BA910DC72EC3F6BC001E651C /* FinanceApp */,
+				BA142E642EC404D30080FB37 /* Assets.xcassets */,
+				BA910DC72EC3F6BC001E651C /* Flourish */,
+				BA910DF92EC3F984001E651C /* FlourishTests */,
 				BA910DC62EC3F6BC001E651C /* Products */,
 			);
 			sourceTree = "<group>";
@@ -40,7 +70,8 @@
 		BA910DC62EC3F6BC001E651C /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				BA910DC52EC3F6BC001E651C /* FinanceApp.app */,
+				BA910DC52EC3F6BC001E651C /* Flourish.app */,
+				BA910DF82EC3F984001E651C /* FlourishTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -48,9 +79,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		BA910DC42EC3F6BC001E651C /* FinanceApp */ = {
+		BA910DC42EC3F6BC001E651C /* Flourish */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = BA910DD02EC3F6BE001E651C /* Build configuration list for PBXNativeTarget "FinanceApp" */;
+			buildConfigurationList = BA910DD02EC3F6BE001E651C /* Build configuration list for PBXNativeTarget "Flourish" */;
 			buildPhases = (
 				BA910DC12EC3F6BC001E651C /* Sources */,
 				BA910DC22EC3F6BC001E651C /* Frameworks */,
@@ -61,14 +92,37 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				BA910DC72EC3F6BC001E651C /* FinanceApp */,
+				BA910DC72EC3F6BC001E651C /* Flourish */,
 			);
-			name = FinanceApp;
+			name = Flourish;
 			packageProductDependencies = (
 			);
 			productName = FinanceApp;
-			productReference = BA910DC52EC3F6BC001E651C /* FinanceApp.app */;
+			productReference = BA910DC52EC3F6BC001E651C /* Flourish.app */;
 			productType = "com.apple.product-type.application";
+		};
+		BA910DF72EC3F984001E651C /* FlourishTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = BA910DFE2EC3F984001E651C /* Build configuration list for PBXNativeTarget "FlourishTests" */;
+			buildPhases = (
+				BA910DF42EC3F984001E651C /* Sources */,
+				BA910DF52EC3F984001E651C /* Frameworks */,
+				BA910DF62EC3F984001E651C /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				BA910DFD2EC3F984001E651C /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				BA910DF92EC3F984001E651C /* FlourishTests */,
+			);
+			name = FlourishTests;
+			packageProductDependencies = (
+			);
+			productName = FinanceAppTests;
+			productReference = BA910DF82EC3F984001E651C /* FlourishTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
 		};
 /* End PBXNativeTarget section */
 
@@ -82,10 +136,16 @@
 				TargetAttributes = {
 					BA910DC42EC3F6BC001E651C = {
 						CreatedOnToolsVersion = 26.1.1;
+						LastSwiftMigration = 2610;
+					};
+					BA910DF72EC3F984001E651C = {
+						CreatedOnToolsVersion = 26.1.1;
+						LastSwiftMigration = 2610;
+						TestTargetID = BA910DC42EC3F6BC001E651C;
 					};
 				};
 			};
-			buildConfigurationList = BA910DC02EC3F6BC001E651C /* Build configuration list for PBXProject "FinanceApp" */;
+			buildConfigurationList = BA910DC02EC3F6BC001E651C /* Build configuration list for PBXProject "Flourish" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -99,13 +159,22 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				BA910DC42EC3F6BC001E651C /* FinanceApp */,
+				BA910DC42EC3F6BC001E651C /* Flourish */,
+				BA910DF72EC3F984001E651C /* FlourishTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		BA910DC32EC3F6BC001E651C /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				BA142E652EC404D30080FB37 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BA910DF62EC3F984001E651C /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -122,7 +191,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		BA910DF42EC3F984001E651C /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		BA910DFD2EC3F984001E651C /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = BA910DC42EC3F6BC001E651C /* Flourish */;
+			targetProxy = BA910DFC2EC3F984001E651C /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		BA910DCE2EC3F6BE001E651C /* Debug */ = {
@@ -249,10 +333,15 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
+				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 5H372W2U8R;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Flourish;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.finance";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -263,12 +352,13 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = immanuelsavio.FinanceApp;
+				PRODUCT_BUNDLE_IDENTIFIER = immanuelsavio.Flourish;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -280,10 +370,15 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
+				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 5H372W2U8R;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Flourish;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.finance";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -294,7 +389,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = immanuelsavio.FinanceApp;
+				PRODUCT_BUNDLE_IDENTIFIER = immanuelsavio.Flourish;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -306,10 +401,55 @@
 			};
 			name = Release;
 		};
+		BA910DFF2EC3F984001E651C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 5H372W2U8R;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = immanuelsavio.FinanceAppTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Flourish.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Flourish";
+			};
+			name = Debug;
+		};
+		BA910E002EC3F984001E651C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 5H372W2U8R;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = immanuelsavio.FinanceAppTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Flourish.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Flourish";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		BA910DC02EC3F6BC001E651C /* Build configuration list for PBXProject "FinanceApp" */ = {
+		BA910DC02EC3F6BC001E651C /* Build configuration list for PBXProject "Flourish" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				BA910DCE2EC3F6BE001E651C /* Debug */,
@@ -318,11 +458,20 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		BA910DD02EC3F6BE001E651C /* Build configuration list for PBXNativeTarget "FinanceApp" */ = {
+		BA910DD02EC3F6BE001E651C /* Build configuration list for PBXNativeTarget "Flourish" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				BA910DD12EC3F6BE001E651C /* Debug */,
 				BA910DD22EC3F6BE001E651C /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		BA910DFE2EC3F984001E651C /* Build configuration list for PBXNativeTarget "FlourishTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BA910DFF2EC3F984001E651C /* Debug */,
+				BA910E002EC3F984001E651C /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
