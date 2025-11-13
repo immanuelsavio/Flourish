@@ -8,19 +8,9 @@
 
 /* Begin PBXBuildFile section */
 		BA142E652EC404D30080FB37 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = BA142E642EC404D30080FB37 /* Assets.xcassets */; };
-		BA8C02272EC534AD006CE740 /* SalaryIncome.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA8C02262EC534AD006CE740 /* SalaryIncome.swift */; };
-		BA8C02292EC534BA006CE740 /* ActionItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA8C02282EC534BA006CE740 /* ActionItem.swift */; };
-		BA8C022B2EC5350C006CE740 /* AccountTransactionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA8C022A2EC5350C006CE740 /* AccountTransactionsView.swift */; };
-		BA8C022D2EC53522006CE740 /* ReconcileBalanceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA8C022C2EC53522006CE740 /* ReconcileBalanceView.swift */; };
-		BA8C022F2EC5353F006CE740 /* ActionCenterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA8C022E2EC5353F006CE740 /* ActionCenterView.swift */; };
-		BA8C02312EC53565006CE740 /* SalaryManagementView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA8C02302EC53565006CE740 /* SalaryManagementView.swift */; };
-		BA8C02332EC53588006CE740 /* FriendIOUView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA8C02322EC53588006CE740 /* FriendIOUView.swift */; };
 		BA8C02352EC53645006CE740 /* FLOURISH_NEW_FEATURES.md in Resources */ = {isa = PBXBuildFile; fileRef = BA8C02342EC53645006CE740 /* FLOURISH_NEW_FEATURES.md */; };
 		BA8C02372EC53689006CE740 /* USER_GUIDE.md in Resources */ = {isa = PBXBuildFile; fileRef = BA8C02362EC53689006CE740 /* USER_GUIDE.md */; };
-		BA8C02392EC536E8006CE740 /* IMPLEMENTATION_SUMMARY.md in Resources */ = {isa = PBXBuildFile; fileRef = BA8C02382EC536E8006CE740 /* IMPLEMENTATION_SUMMARY.md */; };
 		BA8C023B2EC53704006CE740 /* Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA8C023A2EC53704006CE740 /* Extensions.swift */; };
-		BA8C023D2EC5370D006CE740 /* Subscription.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA8C023C2EC5370D006CE740 /* Subscription.swift */; };
-		BA8C023F2EC53724006CE740 /* ExpenseDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA8C023E2EC53724006CE740 /* ExpenseDetailView.swift */; };
 		BA8C02412EC53770006CE740 /* IMPLEMENTATION_CHECKLIST.md in Resources */ = {isa = PBXBuildFile; fileRef = BA8C02402EC53770006CE740 /* IMPLEMENTATION_CHECKLIST.md */; };
 /* End PBXBuildFile section */
 
@@ -36,19 +26,9 @@
 
 /* Begin PBXFileReference section */
 		BA142E642EC404D30080FB37 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		BA8C02262EC534AD006CE740 /* SalaryIncome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SalaryIncome.swift; sourceTree = "<group>"; };
-		BA8C02282EC534BA006CE740 /* ActionItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionItem.swift; sourceTree = "<group>"; };
-		BA8C022A2EC5350C006CE740 /* AccountTransactionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountTransactionsView.swift; sourceTree = "<group>"; };
-		BA8C022C2EC53522006CE740 /* ReconcileBalanceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReconcileBalanceView.swift; sourceTree = "<group>"; };
-		BA8C022E2EC5353F006CE740 /* ActionCenterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionCenterView.swift; sourceTree = "<group>"; };
-		BA8C02302EC53565006CE740 /* SalaryManagementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SalaryManagementView.swift; sourceTree = "<group>"; };
-		BA8C02322EC53588006CE740 /* FriendIOUView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FriendIOUView.swift; sourceTree = "<group>"; };
 		BA8C02342EC53645006CE740 /* FLOURISH_NEW_FEATURES.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = FLOURISH_NEW_FEATURES.md; sourceTree = "<group>"; };
 		BA8C02362EC53689006CE740 /* USER_GUIDE.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = USER_GUIDE.md; sourceTree = "<group>"; };
-		BA8C02382EC536E8006CE740 /* IMPLEMENTATION_SUMMARY.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = IMPLEMENTATION_SUMMARY.md; sourceTree = "<group>"; };
 		BA8C023A2EC53704006CE740 /* Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Extensions.swift; sourceTree = "<group>"; };
-		BA8C023C2EC5370D006CE740 /* Subscription.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Subscription.swift; sourceTree = "<group>"; };
-		BA8C023E2EC53724006CE740 /* ExpenseDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExpenseDetailView.swift; sourceTree = "<group>"; };
 		BA8C02402EC53770006CE740 /* IMPLEMENTATION_CHECKLIST.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = IMPLEMENTATION_CHECKLIST.md; sourceTree = "<group>"; };
 		BA910DC52EC3F6BC001E651C /* Flourish.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Flourish.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		BA910DF82EC3F984001E651C /* FlourishTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FlourishTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -63,6 +43,11 @@
 		BA910DF92EC3F984001E651C /* FlourishTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = FlourishTests;
+			sourceTree = "<group>";
+		};
+		BABF9C312EC56F6D000B7BF3 /* Documentation */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Documentation;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -88,23 +73,14 @@
 		BA910DBC2EC3F6BC001E651C = {
 			isa = PBXGroup;
 			children = (
+				BABF9C312EC56F6D000B7BF3 /* Documentation */,
 				BA142E642EC404D30080FB37 /* Assets.xcassets */,
 				BA910DC72EC3F6BC001E651C /* Flourish */,
 				BA910DF92EC3F984001E651C /* FlourishTests */,
 				BA910DC62EC3F6BC001E651C /* Products */,
-				BA8C02262EC534AD006CE740 /* SalaryIncome.swift */,
-				BA8C02282EC534BA006CE740 /* ActionItem.swift */,
-				BA8C022A2EC5350C006CE740 /* AccountTransactionsView.swift */,
-				BA8C022C2EC53522006CE740 /* ReconcileBalanceView.swift */,
-				BA8C022E2EC5353F006CE740 /* ActionCenterView.swift */,
-				BA8C02302EC53565006CE740 /* SalaryManagementView.swift */,
-				BA8C02322EC53588006CE740 /* FriendIOUView.swift */,
 				BA8C02342EC53645006CE740 /* FLOURISH_NEW_FEATURES.md */,
 				BA8C02362EC53689006CE740 /* USER_GUIDE.md */,
-				BA8C02382EC536E8006CE740 /* IMPLEMENTATION_SUMMARY.md */,
 				BA8C023A2EC53704006CE740 /* Extensions.swift */,
-				BA8C023C2EC5370D006CE740 /* Subscription.swift */,
-				BA8C023E2EC53724006CE740 /* ExpenseDetailView.swift */,
 				BA8C02402EC53770006CE740 /* IMPLEMENTATION_CHECKLIST.md */,
 			);
 			sourceTree = "<group>";
@@ -135,6 +111,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				BA910DC72EC3F6BC001E651C /* Flourish */,
+				BABF9C312EC56F6D000B7BF3 /* Documentation */,
 			);
 			name = Flourish;
 			packageProductDependencies = (
@@ -215,7 +192,6 @@
 				BA8C02372EC53689006CE740 /* USER_GUIDE.md in Resources */,
 				BA8C02412EC53770006CE740 /* IMPLEMENTATION_CHECKLIST.md in Resources */,
 				BA142E652EC404D30080FB37 /* Assets.xcassets in Resources */,
-				BA8C02392EC536E8006CE740 /* IMPLEMENTATION_SUMMARY.md in Resources */,
 				BA8C02352EC53645006CE740 /* FLOURISH_NEW_FEATURES.md in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -234,16 +210,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				BA8C02272EC534AD006CE740 /* SalaryIncome.swift in Sources */,
-				BA8C023F2EC53724006CE740 /* ExpenseDetailView.swift in Sources */,
-				BA8C02332EC53588006CE740 /* FriendIOUView.swift in Sources */,
-				BA8C023D2EC5370D006CE740 /* Subscription.swift in Sources */,
-				BA8C02312EC53565006CE740 /* SalaryManagementView.swift in Sources */,
-				BA8C022B2EC5350C006CE740 /* AccountTransactionsView.swift in Sources */,
-				BA8C02292EC534BA006CE740 /* ActionItem.swift in Sources */,
 				BA8C023B2EC53704006CE740 /* Extensions.swift in Sources */,
-				BA8C022D2EC53522006CE740 /* ReconcileBalanceView.swift in Sources */,
-				BA8C022F2EC5353F006CE740 /* ActionCenterView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -2,7 +2,7 @@
 //  TransferView.swift
 //  FinanceApp
 //
-//  View for transferring money between accounts
+//  View for scheduling transfers between accounts (all transfers require approval)
 //
 
 import SwiftUI
@@ -15,8 +15,10 @@ struct TransferView: View {
     @State private var fromAccountId: UUID?
     @State private var toAccountId: UUID?
     @State private var amount = ""
-    @State private var date = Date()
+    @State private var scheduledDate = Date()
     @State private var notes = ""
+    @State private var isRecurring = false
+    @State private var recurrenceInterval = "7" // Default to weekly
     
     var body: some View {
         NavigationView {
@@ -25,9 +27,28 @@ struct TransferView: View {
                     TextField("Amount", text: $amount)
                         .keyboardType(.decimalPad)
                     
-                    DatePicker("Date", selection: $date, displayedComponents: .date)
+                    DatePicker("Scheduled Date", selection: $scheduledDate, displayedComponents: .date)
                     
                     TextField("Notes (optional)", text: $notes)
+                }
+                
+                Section(header: Text("Recurrence (Optional)")) {
+                    Toggle("Recurring Transfer", isOn: $isRecurring)
+                    
+                    if isRecurring {
+                        HStack {
+                            Text("Repeat every")
+                            TextField("Days", text: $recurrenceInterval)
+                                .keyboardType(.numberPad)
+                                .multilineTextAlignment(.trailing)
+                                .frame(width: 50)
+                            Text("days")
+                        }
+                        
+                        Text("Examples: 7 for weekly, 14 for biweekly, 30 for monthly")
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                    }
                 }
                 
                 Section(header: Text("From Account")) {
@@ -65,8 +86,25 @@ struct TransferView: View {
                             .font(.caption)
                     }
                 }
+                
+                Section {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Image(systemName: "info.circle.fill")
+                                .foregroundColor(.blue)
+                            Text("All transfers require approval")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                        }
+                        
+                        Text("After scheduling, you'll need to approve this transfer in the Action Center before it executes.")
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                    }
+                    .padding(.vertical, 4)
+                }
             }
-            .navigationTitle("Transfer Money")
+            .navigationTitle("Schedule Transfer")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -76,8 +114,8 @@ struct TransferView: View {
                 }
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Transfer") {
-                        saveTransfer()
+                    Button("Schedule") {
+                        saveScheduledTransfer()
                     }
                     .disabled(!isValid)
                 }
@@ -92,25 +130,36 @@ struct TransferView: View {
               fromId != toId else {
             return false
         }
+        
+        if isRecurring {
+            guard let interval = Int(recurrenceInterval), interval > 0 else {
+                return false
+            }
+        }
+        
         return true
     }
     
-    private func saveTransfer() {
+    private func saveScheduledTransfer() {
         guard let userId = authService.currentUser?.id,
               let fromId = fromAccountId,
               let toId = toAccountId,
               let transferAmount = Double(amount) else { return }
         
-        let transfer = Transfer(
+        let recurrence = isRecurring ? Int(recurrenceInterval) : nil
+        
+        let scheduledTransfer = ScheduledTransfer(
             userId: userId,
             fromAccountId: fromId,
             toAccountId: toId,
             amount: transferAmount,
-            date: date,
-            notes: notes
+            scheduledDate: scheduledDate,
+            recurrenceDays: recurrence,
+            notes: notes.isEmpty ? nil : notes,
+            isCompleted: false
         )
         
-        dataService.saveTransfer(transfer)
+        dataService.saveScheduledTransfer(scheduledTransfer)
         dismiss()
     }
 }

@@ -45,28 +45,16 @@ struct MainTabView: View {
                 }
             
             NavigationView {
-                MoreView()
+                AccountsListView()
             }
             .tabItem {
-                Label("More", systemImage: "ellipsis.circle.fill")
+                Label("Accounts", systemImage: "creditcard.fill")
             }
         }
         .sheet(isPresented: $showProfileMenu) {
-            ProfileMenuView()
+            HamburgerMenuView()
         }
         .environment(\.showProfileMenu, $showProfileMenu)
-    }
-}
-
-// Environment key for profile menu
-struct ShowProfileMenuKey: EnvironmentKey {
-    static let defaultValue: Binding<Bool> = .constant(false)
-}
-
-extension EnvironmentValues {
-    var showProfileMenu: Binding<Bool> {
-        get { self[ShowProfileMenuKey.self] }
-        set { self[ShowProfileMenuKey.self] = newValue }
     }
 }
 
@@ -192,6 +180,56 @@ struct EditProfileView: View {
     private func saveProfile() {
         authService.updateCurrentUser(name: name, email: email)
         dismiss()
+    }
+}
+
+// MARK: - Hamburger Menu View
+struct HamburgerMenuView: View {
+    @Environment(\.dismiss) var dismiss
+    @StateObject private var authService = AuthenticationService.shared
+    
+    var body: some View {
+        NavigationView {
+            List {
+                Section(header: Text("Financial Tools")) {
+                    NavigationLink(destination: AccountsListView()) {
+                        Label("Manage Accounts", systemImage: "creditcard.fill")
+                    }
+                    NavigationLink(destination: SubscriptionsListView()) {
+                        Label("Manage Subscriptions", systemImage: "arrow.clockwise")
+                    }
+                    NavigationLink(destination: TransferListView()) {
+                        Label("Transfers", systemImage: "arrow.left.arrow.right")
+                    }
+                    NavigationLink(destination: SavingsBudgetView()) {
+                        Label("Savings Goals", systemImage: "chart.line.uptrend.xyaxis")
+                    }
+                    NavigationLink(destination: MonthlyReportView()) {
+                        Label("Monthly Reports", systemImage: "chart.bar.fill")
+                    }
+                }
+                Section(header: Text("Settings")) {
+                    NavigationLink(destination: SettingsAndAppearanceView()) {
+                        Label("Settings", systemImage: "gearshape.fill")
+                    }
+                }
+                Section {
+                    Button(action: {
+                        authService.logout()
+                        dismiss()
+                    }) {
+                        Label("Logout", systemImage: "rectangle.portrait.and.arrow.right")
+                            .foregroundColor(.red)
+                    }
+                }
+            }
+            .navigationTitle("Menu")
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
     }
 }
 

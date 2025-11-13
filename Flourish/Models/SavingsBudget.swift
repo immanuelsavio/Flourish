@@ -16,7 +16,7 @@ enum SavingsType: String, Codable, CaseIterable {
     case other = "Other"
 }
 
-struct SavingsBudget: Identifiable, Codable {
+struct SavingsBudget: Identifiable, Codable, Hashable {
     var id: UUID
     var userId: UUID
     var name: String

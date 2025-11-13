@@ -15,6 +15,9 @@ extension Double {
         let formatter = NumberFormatter()
         formatter.numberStyle = .currency
         formatter.locale = Locale.current
+        if let code = UserDefaults.standard.string(forKey: "currencyCode"), !code.isEmpty {
+            formatter.currencyCode = code
+        }
         formatter.minimumFractionDigits = 2
         formatter.maximumFractionDigits = 2
         return formatter.string(from: NSNumber(value: self)) ?? "$0.00"
@@ -160,30 +163,6 @@ extension Array where Element == Double {
     }
 }
 
-// MARK: - Subscription Extensions
-
-extension Subscription {
-    /// Check if subscription is due within the next 7 days
-    var isDueSoon: Bool {
-        let daysUntilDue = Calendar.current.dateComponents([.day], from: Date(), to: nextDueDate).day ?? 0
-        return daysUntilDue >= 0 && daysUntilDue <= 7
-    }
-    
-    /// Calculate next due date based on frequency
-    func calculateNextDueDate() -> Date {
-        let calendar = Calendar.current
-        
-        switch frequency {
-        case .monthly:
-            return calendar.date(byAdding: .month, value: 1, to: nextDueDate) ?? nextDueDate
-        case .yearly:
-            return calendar.date(byAdding: .year, value: 1, to: nextDueDate) ?? nextDueDate
-        case .weekly:
-            return calendar.date(byAdding: .weekOfYear, value: 1, to: nextDueDate) ?? nextDueDate
-        }
-    }
-}
-
 // MARK: - Notification Names
 
 extension Notification.Name {
@@ -270,3 +249,4 @@ class PercentageFormatter: NumberFormatter {
         fatalError("init(coder:) has not been implemented")
     }
 }
+

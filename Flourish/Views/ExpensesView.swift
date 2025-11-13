@@ -14,34 +14,18 @@ struct ExpensesView: View {
     @State private var showAddExpense = false
     @State private var showFilterSheet = false
     @State private var selectedCategories: Set<String> = []
+    @State private var selectedMonth = Calendar.current.component(.month, from: Date())
+    @State private var selectedYear = Calendar.current.component(.year, from: Date())
+    @State private var filterByDate = true // Default to current month
     
     var body: some View {
         NavigationView {
             VStack {
+                // Month Scroller
+                monthScroller
+                
                 if let userId = authService.currentUser?.id {
-                    let allExpenses = dataService.getExpenses(for: userId).sorted { $0.date > $1.date }
-                    let expenses = selectedCategories.isEmpty ? allExpenses : allExpenses.filter { selectedCategories.contains($0.categoryName) }
-                    
-                    if expenses.isEmpty {
-                        VStack {
-                            Text(selectedCategories.isEmpty ? "No expenses yet" : "No expenses in selected categories")
-                                .foregroundColor(.gray)
-                            Text(selectedCategories.isEmpty ? "Tap + to add your first expense" : "Try adjusting your filters")
-                                .font(.caption)
-                                .foregroundColor(.gray)
-                        }
-                    } else {
-                        List {
-                            ForEach(expenses) { expense in
-                                NavigationLink(destination: ExpenseDetailView(expense: expense)) {
-                                    ExpenseRow(expense: expense)
-                                }
-                            }
-                            .onDelete { offsets in
-                                deleteExpenses(at: offsets, from: expenses)
-                            }
-                        }
-                    }
+                    expensesList(for: userId)
                 }
             }
             .navigationTitle("Expenses")
@@ -56,7 +40,7 @@ struct ExpensesView: View {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     HStack {
                         Button(action: { showFilterSheet = true }) {
-                            Image(systemName: selectedCategories.isEmpty ? "line.3.horizontal.decrease.circle" : "line.3.horizontal.decrease.circle.fill")
+                            Image(systemName: (selectedCategories.isEmpty && !filterByDate) ? "line.3.horizontal.decrease.circle" : "line.3.horizontal.decrease.circle.fill")
                         }
                         
                         Button(action: { showAddExpense = true }) {
@@ -69,9 +53,118 @@ struct ExpensesView: View {
                 AddExpenseView()
             }
             .sheet(isPresented: $showFilterSheet) {
-                ExpenseFilterView(selectedCategories: $selectedCategories)
+                ExpenseFilterView(
+                    selectedCategories: $selectedCategories,
+                    filterByDate: $filterByDate
+                )
             }
         }
+    }
+    
+    private var filteredExpenses: [Expense] {
+        guard let userId = authService.currentUser?.id else { return [] }
+        
+        let allExpenses: [Expense]
+        if filterByDate {
+            allExpenses = dataService.getExpenses(for: userId, month: selectedMonth, year: selectedYear).sorted { $0.date > $1.date }
+        } else {
+            allExpenses = dataService.getExpenses(for: userId).sorted { $0.date > $1.date }
+        }
+        
+        return selectedCategories.isEmpty ? allExpenses : allExpenses.filter { selectedCategories.contains($0.categoryName) }
+    }
+    
+    @ViewBuilder
+    private func expensesList(for userId: UUID) -> some View {
+        let expenses = filteredExpenses
+        
+        // Summary
+        if !expenses.isEmpty {
+            VStack(spacing: 4) {
+                HStack {
+                    Text("Total: \(expenses.count) expenses")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Text(expenses.reduce(0) { $0 + $1.userShare }.formatAsCurrency())
+                        .font(.headline)
+                        .fontWeight(.bold)
+                }
+                .padding(.horizontal)
+                .padding(.vertical, 8)
+                .background(Color(.systemGray6))
+            }
+        }
+        
+        if expenses.isEmpty {
+            VStack {
+                Text(selectedCategories.isEmpty ? "No expenses yet" : "No expenses match filters")
+                    .foregroundColor(.gray)
+                Text(selectedCategories.isEmpty ? "Tap + to add your first expense" : "Try adjusting your filters")
+                    .font(.caption)
+                    .foregroundColor(.gray)
+            }
+        } else {
+            List {
+                ForEach(expenses) { expense in
+                    NavigationLink(destination: ExpenseDetailView(expense: expense)) {
+                        ExpenseRow(expense: expense)
+                    }
+                }
+                .onDelete { offsets in
+                    deleteExpenses(at: offsets, from: expenses)
+                }
+            }
+        }
+    }
+    
+    private var monthScroller: some View {
+        HStack {
+            Button(action: previousMonth) {
+                Image(systemName: "chevron.left")
+            }
+            .disabled(!filterByDate)
+            
+            Spacer()
+            
+            Toggle(isOn: $filterByDate) {
+                Text(filterByDate ? monthName(selectedMonth) + " \(selectedYear)" : "All Time")
+                    .font(.headline)
+            }
+            .toggleStyle(.button)
+            .tint(.blue)
+            
+            Spacer()
+            
+            Button(action: nextMonth) {
+                Image(systemName: "chevron.right")
+            }
+            .disabled(!filterByDate)
+        }
+        .padding()
+    }
+    
+    private func previousMonth() {
+        selectedMonth -= 1
+        if selectedMonth < 1 {
+            selectedMonth = 12
+            selectedYear -= 1
+        }
+    }
+    
+    private func nextMonth() {
+        selectedMonth += 1
+        if selectedMonth > 12 {
+            selectedMonth = 1
+            selectedYear += 1
+        }
+    }
+    
+    private func monthName(_ month: Int) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMMM"
+        let date = Calendar.current.date(from: DateComponents(year: 2000, month: month, day: 1))!
+        return formatter.string(from: date)
     }
     
     private func deleteExpenses(at offsets: IndexSet, from expenses: [Expense]) {
@@ -308,6 +401,8 @@ struct AddExpenseView: View {
 
 struct AddSplitParticipantView: View {
     @Environment(\.dismiss) var dismiss
+    @EnvironmentObject var dataService: DataService
+    @StateObject private var authService = AuthenticationService.shared
     
     let totalAmount: Double
     let existingParticipants: [SplitParticipant]
@@ -315,12 +410,38 @@ struct AddSplitParticipantView: View {
     
     @State private var name = ""
     @State private var amount = ""
+    @State private var showingExistingPeople = false
+    @State private var useExistingPerson = false
+    @State private var selectedExistingPerson: String?
     
     var body: some View {
         NavigationView {
             Form {
-                Section(header: Text("Participant Details")) {
-                    TextField("Name", text: $name)
+                Section(header: Text("Select Person")) {
+                    // Get existing people from balances
+                    if let userId = authService.currentUser?.id {
+                        let existingPeople = dataService.getBalancesOwed(for: userId).map { $0.personName }
+                        
+                        if !existingPeople.isEmpty {
+                            Toggle("Use existing person", isOn: $useExistingPerson)
+                            
+                            if useExistingPerson {
+                                Picker("Person", selection: $selectedExistingPerson) {
+                                    Text("Select person").tag(nil as String?)
+                                    ForEach(existingPeople, id: \.self) { person in
+                                        Text(person).tag(person as String?)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    if !useExistingPerson {
+                        TextField("Name", text: $name)
+                    }
+                }
+                
+                Section(header: Text("Amount")) {
                     TextField("Amount", text: $amount)
                         .keyboardType(.decimalPad)
                 }
@@ -348,17 +469,24 @@ struct AddSplitParticipantView: View {
                     Button("Add") {
                         addParticipant()
                     }
-                    .disabled(name.isEmpty || amount.isEmpty)
+                    .disabled(!isValid)
                 }
             }
         }
     }
     
+    private var isValid: Bool {
+        let hasName = useExistingPerson ? selectedExistingPerson != nil : !name.isEmpty
+        return hasName && !amount.isEmpty
+    }
+    
     private func addParticipant() {
         guard let participantAmount = Double(amount) else { return }
         
+        let participantName = useExistingPerson ? (selectedExistingPerson ?? "") : name
+        
         let participant = SplitParticipant(
-            name: name,
+            name: participantName,
             amount: participantAmount,
             isCurrentUser: false
         )
@@ -393,104 +521,113 @@ struct EditExpenseView: View {
     @State private var showAddParticipant = false
     
     var body: some View {
-        Form {
-            Section(header: Text("Expense Details")) {
-                TextField("Amount", text: $amount)
-                    .keyboardType(.decimalPad)
-                
-                TextField("Description", text: $description)
-                
-                DatePicker("Date", selection: $date, displayedComponents: .date)
-            }
-            
-            Section(header: Text("Category")) {
-                if let userId = authService.currentUser?.id {
-                    let now = Date()
-                    let month = Calendar.current.component(.month, from: now)
-                    let year = Calendar.current.component(.year, from: now)
-                    let budgetCategories = dataService.getBudgetCategories(for: userId, month: month, year: year)
-                    let budgetCategoryNames = Set(budgetCategories.map { $0.name })
+        NavigationView {
+            Form {
+                Section(header: Text("Expense Details")) {
+                    TextField("Amount", text: $amount)
+                        .keyboardType(.decimalPad)
                     
-                    // Combine default categories with budget categories
-                    let allCategories = DefaultCategories.all + budgetCategories.filter { !DefaultCategories.isDefault($0.name) }.map { $0.name }
+                    TextField("Description", text: $description)
                     
-                    Picker("Category", selection: $selectedCategory) {
-                        Text("Select Category").tag("")
-                        ForEach(allCategories, id: \.self) { categoryName in
-                            if budgetCategoryNames.contains(categoryName) {
-                                // Show with checkmark if in budget
-                                Label(categoryName, systemImage: "checkmark.circle.fill")
-                                    .tag(categoryName)
-                            } else {
-                                Text(categoryName).tag(categoryName)
+                    DatePicker("Date", selection: $date, displayedComponents: .date)
+                }
+                
+                Section(header: Text("Category")) {
+                    if let userId = authService.currentUser?.id {
+                        let now = Date()
+                        let month = Calendar.current.component(.month, from: now)
+                        let year = Calendar.current.component(.year, from: now)
+                        let budgetCategories = dataService.getBudgetCategories(for: userId, month: month, year: year)
+                        let budgetCategoryNames = Set(budgetCategories.map { $0.name })
+                        
+                        // Combine default categories with budget categories
+                        let allCategories = DefaultCategories.all + budgetCategories.filter { !DefaultCategories.isDefault($0.name) }.map { $0.name }
+                        
+                        Picker("Category", selection: $selectedCategory) {
+                            Text("Select Category").tag("")
+                            ForEach(allCategories, id: \.self) { categoryName in
+                                if budgetCategoryNames.contains(categoryName) {
+                                    // Show with checkmark if in budget
+                                    Label(categoryName, systemImage: "checkmark.circle.fill")
+                                        .tag(categoryName)
+                                } else {
+                                    Text(categoryName).tag(categoryName)
+                                }
                             }
                         }
                     }
                 }
-            }
-            
-            Section(header: Text("Payment Account")) {
-                if let userId = authService.currentUser?.id {
-                    let accounts = dataService.getAccounts(for: userId)
-                    
-                    Picker("Account", selection: $selectedAccountId) {
-                        Text("Select Account").tag(nil as UUID?)
-                        ForEach(accounts) { account in
-                            Text(account.name).tag(account.id as UUID?)
+                
+                Section(header: Text("Payment Account")) {
+                    if let userId = authService.currentUser?.id {
+                        let accounts = dataService.getAccounts(for: userId)
+                        
+                        Picker("Account", selection: $selectedAccountId) {
+                            Text("Select Account").tag(nil as UUID?)
+                            ForEach(accounts) { account in
+                                Text(account.name).tag(account.id as UUID?)
+                            }
                         }
                     }
                 }
-            }
-            
-            Section(header: HStack {
-                Text("Split With")
-                Spacer()
-                Button("Add Person") {
-                    showAddParticipant = true
-                }
-                .font(.caption)
-            }) {
-                if splitParticipants.isEmpty {
-                    Text("Not split")
-                        .foregroundColor(.gray)
-                } else {
-                    ForEach(splitParticipants) { participant in
-                        HStack {
-                            Text(participant.name)
-                            Spacer()
-                            Text(formatCurrency(participant.amount))
-                        }
+                
+                Section(header: HStack {
+                    Text("Split With")
+                    Spacer()
+                    Button("Add Person") {
+                        showAddParticipant = true
                     }
-                    .onDelete(perform: deleteParticipant)
+                    .font(.caption)
+                }) {
+                    if splitParticipants.isEmpty {
+                        Text("Not split")
+                            .foregroundColor(.gray)
+                    } else {
+                        ForEach(splitParticipants) { participant in
+                            HStack {
+                                Text(participant.name)
+                                Spacer()
+                                Text(formatCurrency(participant.amount))
+                            }
+                        }
+                        .onDelete(perform: deleteParticipant)
+                    }
                 }
             }
-        }
-        .navigationTitle("Edit Expense")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Button("Save") {
-                    saveExpense()
+            .navigationTitle("Edit Expense")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
                 }
-                .disabled(!isValid)
+                
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Save") {
+                        saveExpense()
+                    }
+                    .disabled(!isValid)
+                }
             }
-        }
-        .sheet(isPresented: $showAddParticipant) {
-            AddSplitParticipantView(
-                totalAmount: Double(amount) ?? 0,
-                existingParticipants: splitParticipants
-            ) { participant in
-                splitParticipants.append(participant)
+            .sheet(isPresented: $showAddParticipant) {
+                AddSplitParticipantView(
+                    totalAmount: Double(amount) ?? 0,
+                    existingParticipants: splitParticipants
+                ) { participant in
+                    splitParticipants.append(participant)
+                }
             }
-        }
-        .onAppear {
-            // Populate fields with existing expense data
-            amount = String(expense.amount)
-            description = expense.description
-            selectedCategory = expense.categoryName
-            selectedAccountId = expense.accountId
-            date = expense.date
-            splitParticipants = expense.splitParticipants
+            .onAppear {
+                // Populate fields with existing expense data
+                amount = String(expense.amount)
+                description = expense.description
+                selectedCategory = expense.categoryName
+                selectedAccountId = expense.accountId
+                date = expense.date
+                // Remove current user from participants list for editing
+                splitParticipants = expense.splitParticipants.filter { !$0.isCurrentUser }
+            }
         }
     }
     
@@ -549,11 +686,16 @@ struct ExpenseFilterView: View {
     @EnvironmentObject var dataService: DataService
     @StateObject private var authService = AuthenticationService.shared
     @Binding var selectedCategories: Set<String>
+    @Binding var filterByDate: Bool
     
     var body: some View {
         NavigationView {
             List {
-                Section(header: Text("Filter by Category")) {
+                Section(header: Text("Date Filter")) {
+                    Toggle("Filter by Month", isOn: $filterByDate)
+                }
+                
+                Section(header: Text("Category Filter")) {
                     if let userId = authService.currentUser?.id {
                         let expenses = dataService.getExpenses(for: userId)
                         let uniqueCategories = Set(expenses.map { $0.categoryName }).sorted()
@@ -581,8 +723,9 @@ struct ExpenseFilterView: View {
                 Section {
                     Button("Clear All Filters") {
                         selectedCategories.removeAll()
+                        filterByDate = false
                     }
-                    .disabled(selectedCategories.isEmpty)
+                    .disabled(selectedCategories.isEmpty && !filterByDate)
                 }
             }
             .navigationTitle("Filter Expenses")
@@ -597,112 +740,3 @@ struct ExpenseFilterView: View {
         }
     }
 }
-
-// MARK: - Expense Detail View
-
-struct ExpenseDetailView: View {
-    @Environment(\.dismiss) var dismiss
-    @EnvironmentObject var dataService: DataService
-    @State private var showEditSheet = false
-    @State private var showDeleteAlert = false
-    
-    let expense: Expense
-    
-    var body: some View {
-        List {
-            Section(header: Text("Details")) {
-                HStack {
-                    Text("Amount")
-                    Spacer()
-                    Text(expense.amount.formatAsCurrency())
-                        .font(.headline)
-                }
-                
-                HStack {
-                    Text("Your Share")
-                    Spacer()
-                    Text(expense.userShare.formatAsCurrency())
-                        .font(.headline)
-                        .foregroundColor(.blue)
-                }
-                
-                HStack {
-                    Text("Description")
-                    Spacer()
-                    Text(expense.description)
-                        .foregroundColor(.gray)
-                }
-                
-                HStack {
-                    Text("Category")
-                    Spacer()
-                    Text(expense.categoryName)
-                        .foregroundColor(.gray)
-                }
-                
-                HStack {
-                    Text("Date")
-                    Spacer()
-                    Text(expense.date.formatted())
-                        .foregroundColor(.gray)
-                }
-            }
-            
-            if !expense.splitParticipants.isEmpty {
-                Section(header: Text("Split Details")) {
-                    ForEach(expense.splitParticipants) { participant in
-                        HStack {
-                            Text(participant.name)
-                            if participant.isCurrentUser {
-                                Text("(You)")
-                                    .font(.caption)
-                                    .foregroundColor(.gray)
-                            }
-                            Spacer()
-                            Text(participant.amount.formatAsCurrency())
-                                .foregroundColor(participant.isCurrentUser ? .blue : .primary)
-                        }
-                    }
-                }
-            }
-            
-            if expense.isSubscription {
-                Section {
-                    HStack {
-                        Image(systemName: "arrow.clockwise")
-                            .foregroundColor(.orange)
-                        Text("This is a recurring subscription")
-                            .foregroundColor(.orange)
-                    }
-                }
-            }
-            
-            Section {
-                Button(action: { showEditSheet = true }) {
-                    Label("Edit Expense", systemImage: "pencil")
-                }
-                
-                Button(role: .destructive, action: { showDeleteAlert = true }) {
-                    Label("Delete Expense", systemImage: "trash")
-                }
-            }
-        }
-        .navigationTitle("Expense Details")
-        .navigationBarTitleDisplayMode(.inline)
-        .sheet(isPresented: $showEditSheet) {
-            NavigationView {
-                EditExpenseView(expense: expense)
-            }
-        }
-        .alert("Delete Expense", isPresented: $showDeleteAlert) {
-            Button("Cancel", role: .cancel) {}
-            Button("Delete", role: .destructive) {
-                dataService.deleteExpense(expense)
-                dismiss()
-            }
-        } message: {
-            Text("Are you sure you want to delete this expense? This action cannot be undone.")
-        }
-    }
-}
-

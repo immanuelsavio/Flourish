@@ -11,65 +11,41 @@ struct BalancesView: View {
     @Environment(\.showProfileMenu) var showProfileMenu
     @EnvironmentObject var dataService: DataService
     @StateObject private var authService = AuthenticationService.shared
-    @State private var showAddRepayment = false
-    @State private var selectedPerson: String?
-    @State private var showSettleUp = false
-    @State private var settleUpPerson: String?
+    @State private var showSettleAlert = false
+    @State private var showPartialSettleSheet = false
+    @State private var settleUpBalance: BalanceOwed?
+    @State private var showAddBalance = false
     
     var body: some View {
         NavigationView {
             VStack {
                 if let userId = authService.currentUser?.id {
                     let balances = dataService.getBalancesOwed(for: userId).sorted { $0.amount > $1.amount }
-                    let ious = dataService.getActiveFriendIOUs(for: userId)
                     
-                    if balances.isEmpty && ious.isEmpty {
+                    if balances.isEmpty {
                         VStack(spacing: 10) {
                             Image(systemName: "person.2.slash")
                                 .font(.system(size: 60))
                                 .foregroundColor(.gray)
                             Text("No outstanding balances")
                                 .foregroundColor(.gray)
-                            Text("Split expenses and IOUs will appear here")
+                            Text("Split expenses will appear here")
                                 .font(.caption)
                                 .foregroundColor(.gray)
                         }
                     } else {
                         List {
-                            if !balances.isEmpty {
-                                Section(header: Text("From Expense Splits")) {
-                                    ForEach(balances) { balance in
-                                        BalanceRow(
-                                            personName: balance.personName,
-                                            amount: balance.amount,
-                                            lastUpdated: balance.lastUpdated,
-                                            onRepayment: {
-                                                selectedPerson = balance.personName
-                                                showAddRepayment = true
-                                            },
-                                            onSettleUp: {
-                                                settleUpPerson = balance.personName
-                                                showSettleUp = true
-                                            }
-                                        )
+                            ForEach(balances) { balance in
+                                BalanceRow(
+                                    personName: balance.personName,
+                                    amount: balance.amount,
+                                    lastUpdated: balance.lastUpdated,
+                                    isOwedToMe: balance.isOwedToMe,
+                                    onSettleUp: {
+                                        settleUpBalance = balance
+                                        showSettleAlert = true
                                     }
-                                }
-                            }
-                            
-                            if !ious.isEmpty {
-                                Section(header: Text("Personal IOUs")) {
-                                    NavigationLink(destination: FriendIOUView()) {
-                                        HStack {
-                                            Image(systemName: "hand.raised.fill")
-                                                .foregroundColor(.blue)
-                                            Text("\(ious.count) active IOUs")
-                                            Spacer()
-                                            Image(systemName: "chevron.right")
-                                                .font(.caption)
-                                                .foregroundColor(.gray)
-                                        }
-                                    }
-                                }
+                                )
                             }
                         }
                     }
@@ -85,20 +61,29 @@ struct BalancesView: View {
                 }
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    NavigationLink(destination: FriendIOUView()) {
+                    Button(action: { showAddBalance = true }) {
                         Image(systemName: "plus")
                     }
                 }
             }
-            .sheet(isPresented: $showAddRepayment) {
-                if let person = selectedPerson {
-                    AddRepaymentView(personName: person)
+            .alert("Settle Up", isPresented: $showSettleAlert, presenting: settleUpBalance) { balance in
+                Button("Cancel", role: .cancel) { }
+                Button("Settle Full Amount") {
+                    settleUpBalanceAction(balance, amount: balance.amount)
+                }
+                Button("Settle Partial Amount") {
+                    showPartialSettleSheet = true
+                }
+            } message: { balance in
+                Text("Settle balance of \(balance.amount.formatAsCurrency()) with \(balance.personName)")
+            }
+            .sheet(isPresented: $showPartialSettleSheet) {
+                if let balance = settleUpBalance {
+                    PartialSettleView(dataService: dataService, balance: balance)
                 }
             }
-            .sheet(isPresented: $showSettleUp) {
-                if let person = settleUpPerson {
-                    SettleUpView(personName: person)
-                }
+            .sheet(isPresented: $showAddBalance) {
+                AddBalanceView(dataService: dataService)
             }
         }
     }
@@ -110,13 +95,32 @@ struct BalancesView: View {
     private func formatDate(_ date: Date) -> String {
         date.formatted()
     }
+    
+    private func settleUpBalanceAction(_ balance: BalanceOwed, amount: Double) {
+        guard let userId = authService.currentUser?.id else { return }
+        
+        if amount >= balance.amount {
+            // Full settlement
+            dataService.settleUpBalance(userId: userId, personName: balance.personName, notes: "Settled up")
+        } else {
+            // Partial settlement - reduce the balance
+            let repayment = Repayment(
+                userId: userId,
+                personName: balance.personName,
+                amount: amount,
+                date: Date(),
+                notes: "Partial settlement"
+            )
+            dataService.recordRepayment(repayment)
+        }
+    }
 }
 
 struct BalanceRow: View {
     let personName: String
     let amount: Double
     let lastUpdated: Date
-    let onRepayment: () -> Void
+    let isOwedToMe: Bool
     let onSettleUp: () -> Void
     
     var body: some View {
@@ -125,6 +129,9 @@ struct BalanceRow: View {
                 VStack(alignment: .leading) {
                     Text(personName)
                         .font(.headline)
+                    Text(isOwedToMe ? "owes you" : "you owe")
+                        .font(.caption)
+                        .foregroundColor(isOwedToMe ? .green : .red)
                     Text("Last updated: \(lastUpdated.formatted())")
                         .font(.caption)
                         .foregroundColor(.gray)
@@ -134,19 +141,11 @@ struct BalanceRow: View {
                 
                 Text(amount.formatAsCurrency())
                     .font(.headline)
-                    .foregroundColor(.green)
+                    .foregroundColor(isOwedToMe ? .green : .red)
             }
             
-            HStack(spacing: 12) {
-                Button(action: onRepayment) {
-                    Label("Record Payment", systemImage: "dollarsign.circle")
-                        .font(.caption)
-                        .foregroundColor(.blue)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(Color.blue.opacity(0.1))
-                        .cornerRadius(8)
-                }
+            HStack {
+                Spacer()
                 
                 Button(action: onSettleUp) {
                     Label("Settle Up", systemImage: "checkmark.circle.fill")
@@ -157,62 +156,68 @@ struct BalanceRow: View {
                         .background(Color.green.opacity(0.1))
                         .cornerRadius(8)
                 }
+                .buttonStyle(.plain)
+                
+                Spacer()
             }
         }
         .padding(.vertical, 4)
     }
 }
 
-struct SettleUpView: View {
+// MARK: - Partial Settle View
+
+struct PartialSettleView: View {
     @Environment(\.dismiss) var dismiss
-    @EnvironmentObject var dataService: DataService
+    @ObservedObject var dataService: DataService
     @StateObject private var authService = AuthenticationService.shared
     
-    let personName: String
+    let balance: BalanceOwed
     
-    @State private var notes = ""
+    @State private var amount = ""
     
     var body: some View {
-        NavigationView {
+        NavigationStack {
             Form {
-                Section(header: Text("Settle Up with \(personName)")) {
-                    if let userId = authService.currentUser?.id,
-                       let balance = dataService.getBalancesOwed(for: userId).first(where: { $0.personName == personName }) {
-                        
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack {
-                                Text("Total Amount:")
-                                Spacer()
-                                Text(balance.amount.formatAsCurrency())
-                                    .fontWeight(.bold)
-                                    .foregroundColor(.green)
-                            }
-                            .font(.title3)
-                            
-                            Text("This will mark the entire balance as paid and reset to zero.")
-                                .font(.caption)
-                                .foregroundColor(.gray)
-                        }
-                        .padding(.vertical, 8)
+                Section(header: Text("Settle with \(balance.personName)")) {
+                    HStack {
+                        Text("Current Balance:")
+                        Spacer()
+                        Text(balance.amount.formatAsCurrency())
+                            .fontWeight(.bold)
+                            .foregroundColor(balance.isOwedToMe ? .green : .red)
                     }
+                }
+                
+                Section(header: Text("Settlement Amount")) {
+                    TextField("Amount to settle", text: $amount)
+                        .keyboardType(.decimalPad)
                     
-                    TextField("Payment method or notes (optional)", text: $notes, axis: .vertical)
-                        .lineLimit(2...4)
+                    if let settleAmount = Double(amount), settleAmount > 0 {
+                        HStack {
+                            Text("Remaining Balance:")
+                            Spacer()
+                            Text((balance.amount - settleAmount).formatAsCurrency())
+                                .fontWeight(.bold)
+                                .foregroundColor(balance.amount - settleAmount <= 0 ? .gray : (balance.isOwedToMe ? .green : .red))
+                        }
+                    }
                 }
                 
                 Section {
-                    Button(action: settleUp) {
-                        Text("Confirm Settlement")
+                    Button(action: settlePartial) {
+                        Text("Settle")
                             .frame(maxWidth: .infinity)
                             .foregroundColor(.white)
                             .padding()
-                            .background(Color.green)
+                            .background(isValid ? Color.green : Color.gray)
                             .cornerRadius(10)
                     }
+                    .disabled(!isValid)
                     .listRowBackground(Color.clear)
                 }
             }
-            .navigationTitle("Settle Up")
+            .navigationTitle("Partial Settlement")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -224,59 +229,75 @@ struct SettleUpView: View {
         }
     }
     
-    private func settleUp() {
-        guard let userId = authService.currentUser?.id else { return }
-        dataService.settleUpBalance(userId: userId, personName: personName, notes: notes)
+    private var isValid: Bool {
+        guard let settleAmount = Double(amount) else { return false }
+        return settleAmount > 0 && settleAmount <= balance.amount
+    }
+    
+    private func settlePartial() {
+        guard let userId = authService.currentUser?.id,
+              let settleAmount = Double(amount), settleAmount > 0 else { return }
+        
+        if settleAmount >= balance.amount {
+            // Full settlement
+            dataService.settleUpBalance(userId: userId, personName: balance.personName, notes: "Settled up")
+        } else {
+            // Partial settlement
+            let repayment = Repayment(
+                userId: userId,
+                personName: balance.personName,
+                amount: settleAmount,
+                date: Date(),
+                notes: "Partial settlement"
+            )
+            dataService.recordRepayment(repayment)
+        }
+        
         dismiss()
     }
 }
 
-struct AddRepaymentView: View {
+// MARK: - Add Balance View
+
+struct AddBalanceView: View {
     @Environment(\.dismiss) var dismiss
-    @EnvironmentObject var dataService: DataService
+    @ObservedObject var dataService: DataService
     @StateObject private var authService = AuthenticationService.shared
     
-    let personName: String
-    
+    @State private var personName = ""
     @State private var amount = ""
     @State private var notes = ""
     @State private var date = Date()
+    @State private var isOwedToMe = true
     
     var body: some View {
         NavigationView {
             Form {
-                Section(header: Text("Repayment from \(personName)")) {
+                Section(header: Text("Balance Details")) {
+                    TextField("Person Name", text: $personName)
+                    
                     TextField("Amount", text: $amount)
                         .keyboardType(.decimalPad)
                     
+                    Picker("Direction", selection: $isOwedToMe) {
+                        Text("They owe me").tag(true)
+                        Text("I owe them").tag(false)
+                    }
+                    .pickerStyle(.segmented)
+                    
                     DatePicker("Date", selection: $date, displayedComponents: .date)
                     
-                    TextField("Notes (optional)", text: $notes)
+                    TextField("Notes (optional)", text: $notes, axis: .vertical)
+                        .lineLimit(2...4)
                 }
                 
-                if let userId = authService.currentUser?.id,
-                   let balance = dataService.getBalancesOwed(for: userId).first(where: { $0.personName == personName }) {
-                    Section {
-                        HStack {
-                            Text("Current balance:")
-                            Spacer()
-                            Text(formatCurrency(balance.amount))
-                                .fontWeight(.bold)
-                        }
-                        
-                        if let repaymentAmount = Double(amount), repaymentAmount > 0 {
-                            HStack {
-                                Text("After repayment:")
-                                Spacer()
-                                Text(formatCurrency(balance.amount - repaymentAmount))
-                                    .fontWeight(.bold)
-                                    .foregroundColor(balance.amount - repaymentAmount <= 0 ? .green : .primary)
-                            }
-                        }
-                    }
+                Section {
+                    Text(isOwedToMe ? "Record money someone owes you." : "Record money you owe someone.")
+                        .font(.caption)
+                        .foregroundColor(.gray)
                 }
             }
-            .navigationTitle("Record Repayment")
+            .navigationTitle("Add Balance")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -287,31 +308,24 @@ struct AddRepaymentView: View {
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Save") {
-                        saveRepayment()
+                        saveBalance()
                     }
-                    .disabled(amount.isEmpty)
+                    .disabled(!isValid)
                 }
             }
         }
     }
     
-    private func saveRepayment() {
-        guard let userId = authService.currentUser?.id,
-              let repaymentAmount = Double(amount) else { return }
-        
-        let repayment = Repayment(
-            userId: userId,
-            personName: personName,
-            amount: repaymentAmount,
-            date: date,
-            notes: notes
-        )
-        
-        dataService.recordRepayment(repayment)
-        dismiss()
+    private var isValid: Bool {
+        !personName.isEmpty && !amount.isEmpty && Double(amount) != nil
     }
     
-    private func formatCurrency(_ amount: Double) -> String {
-        amount.formatAsCurrency()
+    private func saveBalance() {
+        guard let userId = authService.currentUser?.id,
+              let balanceAmount = Double(amount), balanceAmount > 0 else { return }
+        
+        // Create or update a balance entry for this person
+        dataService.addManualBalance(userId: userId, personName: personName, amount: balanceAmount, isOwedToMe: isOwedToMe)
+        dismiss()
     }
 }

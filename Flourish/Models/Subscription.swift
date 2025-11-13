@@ -7,7 +7,7 @@
 
 import Foundation
 
-struct Subscription: Identifiable, Codable {
+struct Subscription: Identifiable, Codable, Hashable {
     var id: UUID
     var userId: UUID
     var name: String

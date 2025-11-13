@@ -7,7 +7,7 @@
 
 import Foundation
 
-struct Expense: Identifiable, Codable {
+struct Expense: Identifiable, Codable, Hashable {
     var id: UUID
     var userId: UUID
     var amount: Double
@@ -18,8 +18,9 @@ struct Expense: Identifiable, Codable {
     var isSubscription: Bool
     var subscriptionId: UUID?
     var splitParticipants: [SplitParticipant]
+    var isPending: Bool
     
-    init(id: UUID = UUID(), userId: UUID, amount: Double, date: Date = Date(), description: String, categoryName: String, accountId: UUID, isSubscription: Bool = false, subscriptionId: UUID? = nil, splitParticipants: [SplitParticipant] = []) {
+    init(id: UUID = UUID(), userId: UUID, amount: Double, date: Date = Date(), description: String, categoryName: String, accountId: UUID, isSubscription: Bool = false, subscriptionId: UUID? = nil, splitParticipants: [SplitParticipant] = [], isPending: Bool = false) {
         self.id = id
         self.userId = userId
         self.amount = amount
@@ -30,6 +31,7 @@ struct Expense: Identifiable, Codable {
         self.isSubscription = isSubscription
         self.subscriptionId = subscriptionId
         self.splitParticipants = splitParticipants
+        self.isPending = isPending
     }
     
     // Calculate the user's share of the expense
@@ -51,7 +53,7 @@ struct Expense: Identifiable, Codable {
     }
 }
 
-struct SplitParticipant: Identifiable, Codable {
+struct SplitParticipant: Identifiable, Codable, Hashable {
     var id: UUID
     var name: String
     var amount: Double

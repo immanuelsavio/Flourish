@@ -12,11 +12,15 @@ struct DashboardView: View {
     @EnvironmentObject var dataService: DataService
     @StateObject private var authService = AuthenticationService.shared
     @State private var showActionCenter = false
+    @State private var showAddAccount = false
+    @State private var showAddBudget = false
+    @State private var showAddSubscription = false
     
     var body: some View {
         NavigationView {
             ScrollView {
                 VStack(spacing: 20) {
+                    heroHeader
                     // Action Center Alert Badge
                     if let userId = authService.currentUser?.id {
                         let actionCount = dataService.getActionItems(for: userId).count
@@ -24,16 +28,12 @@ struct DashboardView: View {
                             actionCenterBanner(count: actionCount)
                         }
                     }
-                    
                     // Account Summary
                     accountSummarySection
-                    
                     // Budget Summary
                     budgetSummarySection
-                    
                     // Recent Expenses
                     recentExpensesSection
-                    
                     // Upcoming Subscriptions
                     upcomingSubscriptionsSection
                 }
@@ -69,6 +69,15 @@ struct DashboardView: View {
             }
             .sheet(isPresented: $showActionCenter) {
                 ActionCenterView()
+            }
+            .sheet(isPresented: $showAddAccount) {
+                AddAccountView()
+            }
+            .sheet(isPresented: $showAddBudget) {
+                AddBudgetCategoryView(month: Calendar.current.component(.month, from: Date()), year: Calendar.current.component(.year, from: Date()))
+            }
+            .sheet(isPresented: $showAddSubscription) {
+                AddSubscriptionView()
             }
             .onAppear {
                 // Process any due subscriptions
@@ -108,6 +117,33 @@ struct DashboardView: View {
         .buttonStyle(.plain)
     }
     
+    private var heroHeader: some View {
+        let totalBalance: Double = {
+            if let userId = authService.currentUser?.id {
+                return dataService.getAccounts(for: userId).reduce(0) { $0 + $1.balance }
+            }
+            return 0
+        }()
+        return ZStack(alignment: .leading) {
+            LinearGradient(colors: [Color.teal, Color.indigo], startPoint: .topLeading, endPoint: .bottomTrailing)
+                .frame(maxWidth: .infinity)
+                .cornerRadius(16)
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Welcome back")
+                    .font(.caption)
+                    .foregroundColor(.white.opacity(0.9))
+                Text(totalBalance.formatAsCurrency())
+                    .font(.system(size: 28, weight: .bold))
+                    .foregroundColor(.white)
+                Text("Total Balance")
+                    .font(.caption2)
+                    .foregroundColor(.white.opacity(0.9))
+            }
+            .padding()
+        }
+        .frame(height: 120)
+    }
+    
     private var accountSummarySection: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Accounts")
@@ -117,9 +153,30 @@ struct DashboardView: View {
                 let accounts = dataService.getAccounts(for: userId)
                 
                 if accounts.isEmpty {
-                    Text("No accounts yet. Add one in the More tab.")
-                        .foregroundColor(.gray)
-                        .italic()
+                    VStack(spacing: 12) {
+                        HStack {
+                            Image(systemName: "creditcard.fill")
+                                .foregroundColor(.blue)
+                            Text("No accounts yet")
+                                .font(.headline)
+                            Spacer()
+                        }
+                        Text("Add a checking or savings account to get started.")
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                        Button(action: { showAddAccount = true }) {
+                            Label("Add Account", systemImage: "plus.circle.fill")
+                                .font(.subheadline)
+                                .foregroundColor(.white)
+                                .padding(.vertical, 8)
+                                .frame(maxWidth: .infinity)
+                                .background(Color.teal)
+                                .cornerRadius(10)
+                        }
+                    }
+                    .padding()
+                    .background(Color.teal.opacity(0.08))
+                    .cornerRadius(12)
                 } else {
                     ForEach(accounts) { account in
                         NavigationLink(destination: AccountTransactionsView(account: account)) {
@@ -174,9 +231,30 @@ struct DashboardView: View {
                 let categories = dataService.getBudgetCategories(for: userId, month: month, year: year)
                 
                 if categories.isEmpty {
-                    Text("No budget set. Create one in the Budget tab.")
-                        .foregroundColor(.gray)
-                        .italic()
+                    VStack(spacing: 12) {
+                        HStack {
+                            Image(systemName: "chart.pie.fill")
+                                .foregroundColor(.indigo)
+                            Text("No budget yet")
+                                .font(.headline)
+                            Spacer()
+                        }
+                        Text("Create your first monthly budget to track spending.")
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                        Button(action: { showAddBudget = true }) {
+                            Label("Create Budget", systemImage: "plus.circle.fill")
+                                .font(.subheadline)
+                                .foregroundColor(.white)
+                                .padding(.vertical, 8)
+                                .frame(maxWidth: .infinity)
+                                .background(Color.indigo)
+                                .cornerRadius(10)
+                        }
+                    }
+                    .padding()
+                    .background(Color.indigo.opacity(0.08))
+                    .cornerRadius(12)
                 } else {
                     let totalBudget = categories.reduce(0) { $0 + $1.monthlyLimit }
                     let totalSpent = categories.reduce(0) { $0 + $1.spent }
@@ -222,9 +300,7 @@ struct DashboardView: View {
                     .prefix(5)
                 
                 if expenses.isEmpty {
-                    Text("No expenses yet.")
-                        .foregroundColor(.gray)
-                        .italic()
+                    EmptyView()
                 } else {
                     ForEach(Array(expenses)) { expense in
                         NavigationLink(destination: ExpenseDetailView(expense: expense)) {
@@ -260,16 +336,38 @@ struct DashboardView: View {
                 .font(.headline)
             
             if let userId = authService.currentUser?.id {
-                let subscriptions = dataService.getSubscriptions(for: userId)
-                    .filter { $0.isDueSoon }
-                    .sorted { $0.nextDueDate < $1.nextDueDate }
+                let allSubs = dataService.getSubscriptions(for: userId)
+                let dueSoon = allSubs.filter { $0.isDueSoon }.sorted { $0.nextDueDate < $1.nextDueDate }
                 
-                if subscriptions.isEmpty {
-                    Text("No subscriptions due soon.")
-                        .foregroundColor(.gray)
-                        .italic()
+                if allSubs.isEmpty {
+                    VStack(spacing: 12) {
+                        HStack {
+                            Image(systemName: "arrow.clockwise")
+                                .foregroundColor(.orange)
+                            Text("No subscriptions yet")
+                                .font(.headline)
+                            Spacer()
+                        }
+                        Text("Add recurring subscriptions to never miss a payment.")
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                        Button(action: { showAddSubscription = true }) {
+                            Label("Add Subscription", systemImage: "plus.circle.fill")
+                                .font(.subheadline)
+                                .foregroundColor(.white)
+                                .padding(.vertical, 8)
+                                .frame(maxWidth: .infinity)
+                                .background(Color.orange.opacity(0.9))
+                                .cornerRadius(10)
+                        }
+                    }
+                    .padding()
+                    .background(Color.orange.opacity(0.07))
+                    .cornerRadius(12)
+                } else if dueSoon.isEmpty {
+                    EmptyView()
                 } else {
-                    ForEach(subscriptions) { subscription in
+                    ForEach(dueSoon) { subscription in
                         HStack {
                             VStack(alignment: .leading) {
                                 Text(subscription.name)
@@ -302,3 +400,4 @@ struct DashboardView: View {
         date.formatted()
     }
 }
+

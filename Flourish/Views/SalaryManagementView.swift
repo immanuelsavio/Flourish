@@ -174,6 +174,7 @@ struct AddSalaryView: View {
     @EnvironmentObject var dataService: DataService
     @StateObject private var authService = AuthenticationService.shared
     
+    @State private var incomeName = ""
     @State private var amount = ""
     @State private var frequency: IncomeFrequency = .monthly
     @State private var selectedAccount: Account?
@@ -186,6 +187,7 @@ struct AddSalaryView: View {
         NavigationView {
             Form {
                 Section(header: Text("Salary Details")) {
+                    TextField("Income Name (e.g., Part-time job)", text: $incomeName)
                     TextField("Amount", text: $amount)
                         .keyboardType(.decimalPad)
                     
@@ -248,6 +250,7 @@ struct AddSalaryView: View {
     }
     
     private var isValid: Bool {
+        guard !incomeName.isEmpty else { return false }
         guard let _ = Double(amount), !amount.isEmpty else { return false }
         guard selectedAccount != nil else { return false }
         if frequency == .custom {
@@ -269,10 +272,11 @@ struct AddSalaryView: View {
         
         let salary = SalaryIncome(
             userId: userId,
+            name: incomeName,
             amount: amountValue,
             frequency: frequency,
-            accountId: account.id,
             nextExpectedDate: nextExpectedDate,
+            accountId: account.id,
             customDayInterval: customInterval
         )
         
@@ -360,3 +364,4 @@ struct EditSalaryView: View {
             .environmentObject(DataService.shared)
     }
 }
+

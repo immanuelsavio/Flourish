@@ -7,7 +7,7 @@
 
 import Foundation
 
-struct BudgetCategory: Identifiable, Codable {
+struct BudgetCategory: Identifiable, Codable, Hashable {
     var id: UUID
     var userId: UUID
     var name: String

@@ -13,6 +13,8 @@ struct ActionCenterView: View {
     @StateObject private var authService = AuthenticationService.shared
     
     @State private var showingSalaryConfirmation: SalaryIncome?
+    @State private var showingScheduledTransfer: ScheduledTransfer?
+    @State private var showingMonthlyReview: (month: Int, year: Int)?
     
     var body: some View {
         NavigationView {
@@ -69,10 +71,29 @@ struct ActionCenterView: View {
             .sheet(item: $showingSalaryConfirmation) { salary in
                 ConfirmSalaryDepositView(salary: salary)
             }
+            .sheet(item: $showingScheduledTransfer) { scheduled in
+                ConfirmScheduledTransferView(scheduled: scheduled)
+            }
+            .sheet(item: Binding(
+                get: {
+                    showingMonthlyReview.map { MonthlyReviewIdentifier(month: $0.month, year: $0.year) }
+                },
+                set: { newValue in
+                    showingMonthlyReview = newValue.map { ($0.month, $0.year) }
+                }
+            )) { identifier in
+                MonthlyReviewView(month: identifier.month, year: identifier.year)
+            }
             .onAppear {
                 refreshActionItems()
             }
         }
+    }
+    
+    private struct MonthlyReviewIdentifier: Identifiable {
+        let id = UUID()
+        let month: Int
+        let year: Int
     }
     
     private func refreshActionItems() {
@@ -110,6 +131,40 @@ struct ActionCenterView: View {
         case .missedExpense:
             // Navigate to add expense
             break
+            
+        case .budgetWarning:
+            // Navigate to budget view or show details
+            break
+        case .creditWarning:
+            // Navigate to accounts/credit view or show details
+            break
+        case .scheduledTransferDueToday:
+            if let relatedId = item.relatedEntityId,
+               let scheduled = dataService.getScheduledTransfers(for: userId).first(where: { $0.id == relatedId }) {
+                showingScheduledTransfer = scheduled
+            }
+        case .pendingExpense:
+            // Navigate to pending expense details
+            break
+        case .pendingTransfer:
+            // Show pending transfer confirmation - requires user approval
+            if let relatedId = item.relatedEntityId,
+               let scheduled = dataService.getScheduledTransfers(for: userId).first(where: { $0.id == relatedId }) {
+                showingScheduledTransfer = scheduled
+            }
+        case .monthlyFinanceReview:
+            // Show monthly review flow
+            let now = Date()
+            let currentMonth = Calendar.current.component(.month, from: now)
+            let currentYear = Calendar.current.component(.year, from: now)
+            
+            // Try to determine which month to review
+            if let status = dataService.monthlyReviewStatuses.first(where: { $0.id == item.relatedEntityId }) {
+                showingMonthlyReview = (status.month, status.year)
+            } else {
+                // Default to current month
+                showingMonthlyReview = (currentMonth, currentYear)
+            }
         }
     }
 }
@@ -179,6 +234,12 @@ struct ActionItemRow: View {
         case .friendBalance: return "person.2.fill"
         case .reconciliationNeeded: return "checkmark.circle"
         case .missedExpense: return "questionmark.circle"
+        case .budgetWarning: return "chart.pie.fill"
+        case .creditWarning: return "creditcard.fill"
+        case .scheduledTransferDueToday: return "arrow.left.arrow.right.circle.fill"
+        case .pendingExpense: return "cart.fill.badge.questionmark"
+        case .pendingTransfer: return "clock.arrow.2.circlepath"
+        case .monthlyFinanceReview: return "calendar.badge.checkmark"
         }
     }
     
@@ -190,6 +251,12 @@ struct ActionItemRow: View {
         case .friendBalance: return .blue
         case .reconciliationNeeded: return .purple
         case .missedExpense: return .gray
+        case .budgetWarning: return .orange
+        case .creditWarning: return .red
+        case .scheduledTransferDueToday: return .blue
+        case .pendingExpense: return .orange
+        case .pendingTransfer: return .blue
+        case .monthlyFinanceReview: return .blue
         }
     }
 }
@@ -271,7 +338,119 @@ struct ConfirmSalaryDepositView: View {
     }
 }
 
+struct ConfirmScheduledTransferView: View {
+    @Environment(\.dismiss) var dismiss
+    @EnvironmentObject var dataService: DataService
+    let scheduled: ScheduledTransfer
+
+    @State private var date = Date()
+    @State private var notes: String
+    @State private var showDeclineAlert = false
+
+    init(scheduled: ScheduledTransfer) {
+        self.scheduled = scheduled
+        _notes = State(initialValue: scheduled.notes ?? "")
+    }
+
+    var body: some View {
+        NavigationView {
+            Form {
+                Section(header: Text("Transfer Details")) {
+                    if let from = dataService.getAccount(by: scheduled.fromAccountId) {
+                        HStack {
+                            Text("From")
+                            Spacer()
+                            Text(from.name).foregroundColor(.gray)
+                        }
+                    }
+                    if let to = dataService.getAccount(by: scheduled.toAccountId) {
+                        HStack {
+                            Text("To")
+                            Spacer()
+                            Text(to.name).foregroundColor(.gray)
+                        }
+                    }
+                    HStack {
+                        Text("Amount")
+                        Spacer()
+                        Text(scheduled.amount.formatAsCurrency()).foregroundColor(.gray)
+                    }
+                    
+                    if let recurrence = scheduled.recurrenceDays {
+                        HStack {
+                            Text("Recurrence")
+                            Spacer()
+                            Text("Every \(recurrence) days")
+                                .foregroundColor(.gray)
+                        }
+                    }
+                }
+
+                Section(header: Text("Confirmation")) {
+                    DatePicker("Transfer Date", selection: $date, displayedComponents: .date)
+                    TextField("Notes (optional)", text: $notes)
+                }
+
+                Section {
+                    Button(action: confirmTransfer) {
+                        Text("Mark Transfer as Completed")
+                            .frame(maxWidth: .infinity)
+                            .foregroundColor(.white)
+                            .padding()
+                            .background(Color.blue)
+                            .cornerRadius(10)
+                    }
+                    .listRowBackground(Color.clear)
+                    
+                    Button(action: { showDeclineAlert = true }) {
+                        Text("Decline Transfer")
+                            .frame(maxWidth: .infinity)
+                            .foregroundColor(.white)
+                            .padding()
+                            .background(Color.red)
+                            .cornerRadius(10)
+                    }
+                    .listRowBackground(Color.clear)
+                }
+            }
+            .navigationTitle("Confirm Transfer")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") { dismiss() }
+                }
+            }
+            .alert("Decline Transfer?", isPresented: $showDeclineAlert) {
+                Button("Cancel", role: .cancel) { }
+                Button("Decline", role: .destructive) {
+                    declineTransfer()
+                }
+            } message: {
+                if scheduled.recurrenceDays != nil {
+                    Text("This is a recurring transfer. Declining will cancel this occurrence only. The next scheduled transfer will still appear.")
+                } else {
+                    Text("This will permanently cancel this scheduled transfer. This action cannot be undone.")
+                }
+            }
+        }
+    }
+
+    private func confirmTransfer() {
+        // Only update balances upon explicit confirmation
+        var updated = scheduled
+        if !notes.isEmpty { updated.notes = notes }
+        dataService.confirmScheduledTransfer(updated)
+        dismiss()
+    }
+    
+    private func declineTransfer() {
+        dataService.declineScheduledTransfer(scheduled)
+        dismiss()
+    }
+}
+
 #Preview {
     ActionCenterView()
         .environmentObject(DataService.shared)
 }
+

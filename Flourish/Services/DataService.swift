@@ -19,11 +19,14 @@ class DataService: ObservableObject {
     @Published var balancesOwed: [BalanceOwed] = []
     @Published var repayments: [Repayment] = []
     @Published var transfers: [Transfer] = []
+    @Published var scheduledTransfers: [ScheduledTransfer] = []
     @Published var savingsBudgets: [SavingsBudget] = []
     @Published var salaryIncomes: [SalaryIncome] = []
     @Published var incomeTransactions: [IncomeTransaction] = []
     @Published var actionItems: [ActionItem] = []
     @Published var friendIOUs: [FriendIOU] = []
+    @Published var monthlyReviewStatuses: [MonthlyReviewStatus] = []
+    @Published var currencyCode: String = Locale.current.currency?.identifier ?? "USD"
     
     private let useRemoteDB: Bool
     private var remoteDBConfig: RemoteDBConfig?
@@ -77,6 +80,10 @@ class DataService: ObservableObject {
     
     func getAccounts(for userId: UUID) -> [Account] {
         accounts.filter { $0.userId == userId }
+    }
+    
+    func hasDepositAccount(for userId: UUID) -> Bool {
+        accounts.contains { $0.userId == userId && ($0.type == .checking || $0.type == .savings) }
     }
     
     func getAccount(by id: UUID) -> Account? {
@@ -358,6 +365,26 @@ class DataService: ObservableObject {
         saveToLocalStorage()
     }
     
+    func addManualBalance(userId: UUID, personName: String, amount: Double, isOwedToMe: Bool = true) {
+        // Check if balance already exists for this person
+        if let index = balancesOwed.firstIndex(where: { $0.userId == userId && $0.personName == personName }) {
+            // Add to existing balance
+            balancesOwed[index].amount += amount
+            balancesOwed[index].lastUpdated = Date()
+        } else {
+            // Create new balance
+            let balance = BalanceOwed(
+                userId: userId,
+                personName: personName,
+                amount: amount,
+                lastUpdated: Date(),
+                isOwedToMe: isOwedToMe
+            )
+            balancesOwed.append(balance)
+        }
+        saveToLocalStorage()
+    }
+    
     // MARK: - Savings Budget Operations
 
     func saveSavingsBudget(_ budget: SavingsBudget) {
@@ -392,6 +419,54 @@ class DataService: ObservableObject {
 
     func getTransfers(for userId: UUID) -> [Transfer] {
         transfers.filter { $0.userId == userId }
+    }
+    
+    // MARK: - Scheduled Transfer Operations
+
+    func saveScheduledTransfer(_ scheduled: ScheduledTransfer) {
+        let isNewTransfer = !scheduledTransfers.contains(where: { $0.id == scheduled.id })
+        
+        if let index = scheduledTransfers.firstIndex(where: { $0.id == scheduled.id }) {
+            scheduledTransfers[index] = scheduled
+        } else {
+            scheduledTransfers.append(scheduled)
+        }
+        
+        // If this is a new scheduled transfer and it's due today or in the past, create action item immediately
+        if isNewTransfer && !scheduled.isCompleted {
+            let today = Calendar.current.startOfDay(for: Date())
+            let scheduledDay = Calendar.current.startOfDay(for: scheduled.scheduledDate)
+            
+            if scheduledDay <= today {
+                let fromName = getAccount(by: scheduled.fromAccountId)?.name ?? "From"
+                let toName = getAccount(by: scheduled.toAccountId)?.name ?? "To"
+                let msg = "Scheduled transfer of \(scheduled.amount.formatAsCurrency()) from \(fromName) → \(toName) requires approval to complete."
+                
+                let item = ActionItem(
+                    userId: scheduled.userId,
+                    type: .pendingTransfer,
+                    title: "Pending Transfer Approval",
+                    message: msg,
+                    priority: .medium,
+                    relatedEntityId: scheduled.id
+                )
+                createActionItem(item)
+            }
+        }
+        
+        saveToLocalStorage()
+    }
+
+    func getScheduledTransfers(for userId: UUID) -> [ScheduledTransfer] {
+        scheduledTransfers.filter { $0.userId == userId }
+    }
+
+    func markScheduledTransferCompleted(_ id: UUID, completedDate: Date = Date()) {
+        if let index = scheduledTransfers.firstIndex(where: { $0.id == id }) {
+            scheduledTransfers[index].isCompleted = true
+            scheduledTransfers[index].completedDate = completedDate
+            saveToLocalStorage()
+        }
     }
     
     // MARK: - Salary Income Operations
@@ -459,10 +534,63 @@ class DataService: ObservableObject {
         incomeTransactions.filter { $0.userId == userId }
     }
     
+    // MARK: - Confirm Scheduled Transfer
+
+    func confirmScheduledTransfer(_ scheduled: ScheduledTransfer) {
+        // Create a normal transfer and update balances
+        let transfer = Transfer(
+            userId: scheduled.userId,
+            fromAccountId: scheduled.fromAccountId,
+            toAccountId: scheduled.toAccountId,
+            amount: scheduled.amount,
+            date: Date(),
+            notes: scheduled.notes ?? "Scheduled transfer completed"
+        )
+        saveTransfer(transfer)
+        // If recurring, advance scheduledDate; else mark completed
+        if let interval = scheduled.recurrenceDays, interval > 0 {
+            if let idx = scheduledTransfers.firstIndex(where: { $0.id == scheduled.id }) {
+                scheduledTransfers[idx].scheduledDate = Calendar.current.date(byAdding: .day, value: interval, to: scheduled.scheduledDate) ?? scheduled.scheduledDate
+                saveToLocalStorage()
+            }
+        } else {
+            markScheduledTransferCompleted(scheduled.id, completedDate: Date())
+        }
+        // Remove related action items
+        actionItems.removeAll { $0.type == .pendingTransfer && $0.relatedEntityId == scheduled.id }
+        saveToLocalStorage()
+    }
+    
+    func declineScheduledTransfer(_ scheduled: ScheduledTransfer) {
+        // If recurring, advance to next occurrence without executing current one
+        if let interval = scheduled.recurrenceDays, interval > 0 {
+            if let idx = scheduledTransfers.firstIndex(where: { $0.id == scheduled.id }) {
+                scheduledTransfers[idx].scheduledDate = Calendar.current.date(byAdding: .day, value: interval, to: scheduled.scheduledDate) ?? scheduled.scheduledDate
+                saveToLocalStorage()
+            }
+        } else {
+            // If one-time, mark as completed (effectively canceling it)
+            markScheduledTransferCompleted(scheduled.id, completedDate: Date())
+        }
+        // Remove related action items
+        actionItems.removeAll { $0.type == .pendingTransfer && $0.relatedEntityId == scheduled.id }
+        saveToLocalStorage()
+    }
+    
     // MARK: - Action Item Operations
     
     func createActionItem(_ item: ActionItem) {
-        // Check if similar item already exists
+        // For monthly review items, remove any existing ones for the same month/year first
+        // This ensures only ONE reminder exists at a time (replaces 7-day with 3-day, etc.)
+        if item.type == .monthlyFinanceReview {
+            actionItems.removeAll { existingItem in
+                existingItem.userId == item.userId &&
+                existingItem.type == .monthlyFinanceReview &&
+                existingItem.relatedEntityId == item.relatedEntityId
+            }
+        }
+        
+        // Check if similar item already exists (for other types)
         let exists = actionItems.contains { existingItem in
             existingItem.userId == item.userId &&
             existingItem.type == item.type &&
@@ -500,9 +628,9 @@ class DataService: ObservableObject {
             let item = ActionItem(
                 userId: userId,
                 type: .salaryPending,
-                priority: priority,
                 title: "Salary Confirmation",
                 message: message,
+                priority: priority,
                 relatedEntityId: salary.id
             )
             createActionItem(item)
@@ -514,9 +642,9 @@ class DataService: ObservableObject {
             let item = ActionItem(
                 userId: userId,
                 type: .subscriptionDue,
-                priority: .medium,
                 title: "Subscription Due",
                 message: "\(subscription.name) - \(subscription.amount.formatAsCurrency()) due on \(subscription.nextDueDate.formatted(date: .abbreviated, time: .omitted))",
+                priority: .medium,
                 relatedEntityId: subscription.id
             )
             createActionItem(item)
@@ -533,9 +661,9 @@ class DataService: ObservableObject {
             let item = ActionItem(
                 userId: userId,
                 type: .overspending,
-                priority: .high,
                 title: "Budget Exceeded",
                 message: "You're over budget in \(category.name) by \(overage.formatAsCurrency())",
+                priority: .high,
                 relatedEntityId: category.id
             )
             createActionItem(item)
@@ -547,28 +675,93 @@ class DataService: ObservableObject {
             let item = ActionItem(
                 userId: userId,
                 type: .friendBalance,
-                priority: .low,
                 title: "Outstanding Balance",
                 message: "\(balance.personName) owes you \(balance.amount.formatAsCurrency())",
+                priority: .low,
                 relatedEntityId: balance.id
             )
             createActionItem(item)
         }
+
+        // Check for scheduled transfers due (one-time or recurring)
+        let scheduled = getScheduledTransfers(for: userId)
+        let today = Calendar.current.startOfDay(for: Date())
+        for s in scheduled where !s.isCompleted {
+            var due = false
+            let scheduledDay = Calendar.current.startOfDay(for: s.scheduledDate)
+            if let interval = s.recurrenceDays, interval > 0 {
+                // Recurring: due if today is on/after first schedule and aligned to recurrence
+                if scheduledDay <= today {
+                    let days = Calendar.current.dateComponents([.day], from: scheduledDay, to: today).day ?? 0
+                    if days % interval == 0 { due = true }
+                }
+            } else {
+                // One-time: due on or after scheduled date until completed
+                if scheduledDay <= today { due = true }
+            }
+            if due {
+                let fromName = getAccount(by: s.fromAccountId)?.name ?? "From"
+                let toName = getAccount(by: s.toAccountId)?.name ?? "To"
+                let msg = "Scheduled transfer of \(s.amount.formatAsCurrency()) from \(fromName) → \(toName) requires approval to complete."
+                let item = ActionItem(
+                    userId: userId,
+                    type: .pendingTransfer,
+                    title: "Pending Transfer Approval",
+                    message: msg,
+                    priority: .medium,
+                    relatedEntityId: s.id
+                )
+                createActionItem(item)
+            }
+        }
         
-        // Check for unsettled IOUs
-        let ious = getFriendIOUs(for: userId)
-        for iou in ious where !iou.isSettled && iou.amount > 20 {
-            let message = iou.direction == .owedToYou
-                ? "\(iou.personName) owes you \(iou.amount.formatAsCurrency())"
-                : "You owe \(iou.personName) \(iou.amount.formatAsCurrency())"
+        // Check for monthly finance review (current month and previous month if not completed)
+        let currentMonth = Calendar.current.component(.month, from: now)
+        let currentYear = Calendar.current.component(.year, from: now)
+        
+        // Check current month review
+        if shouldShowMonthlyReviewReminder(for: userId, month: currentMonth, year: currentYear) {
+            // Get or create status to use as relatedEntityId
+            var status = getMonthlyReviewStatus(for: userId, month: currentMonth, year: currentYear)
+            if status == nil {
+                status = MonthlyReviewStatus(userId: userId, month: currentMonth, year: currentYear)
+                saveMonthlyReviewStatus(status!)
+            }
             
             let item = ActionItem(
                 userId: userId,
-                type: .friendBalance,
-                priority: .low,
-                title: "IOU Reminder",
-                message: message,
-                relatedEntityId: iou.id
+                type: .monthlyFinanceReview,
+                title: "Monthly Finance Review",
+                message: "Review your finances for \(status!.monthYearString). Verify that your app balances match your bank statements.",
+                priority: .high,
+                relatedEntityId: status!.id
+            )
+            createActionItem(item)
+        }
+        
+        // Check ONLY the immediately previous month for carryover (not older months)
+        var previousMonth = currentMonth - 1
+        var previousYear = currentYear
+        if previousMonth < 1 {
+            previousMonth = 12
+            previousYear -= 1
+        }
+        
+        if shouldShowMonthlyReviewReminder(for: userId, month: previousMonth, year: previousYear) {
+            // Get or create status
+            var status = getMonthlyReviewStatus(for: userId, month: previousMonth, year: previousYear)
+            if status == nil {
+                status = MonthlyReviewStatus(userId: userId, month: previousMonth, year: previousYear)
+                saveMonthlyReviewStatus(status!)
+            }
+            
+            let item = ActionItem(
+                userId: userId,
+                type: .monthlyFinanceReview,
+                title: "⚠️ Overdue: Monthly Finance Review",
+                message: "You haven't completed your review for \(status!.monthYearString). Please review your finances to ensure accuracy.",
+                priority: .high,
+                relatedEntityId: status!.id
             )
             createActionItem(item)
         }
@@ -603,6 +796,96 @@ class DataService: ObservableObject {
     
     func deleteFriendIOU(_ iou: FriendIOU) {
         friendIOUs.removeAll { $0.id == iou.id }
+        saveToLocalStorage()
+    }
+    
+    // MARK: - Monthly Review Operations
+    
+    func getMonthlyReviewStatus(for userId: UUID, month: Int, year: Int) -> MonthlyReviewStatus? {
+        monthlyReviewStatuses.first { $0.userId == userId && $0.month == month && $0.year == year }
+    }
+    
+    func saveMonthlyReviewStatus(_ status: MonthlyReviewStatus) {
+        if let index = monthlyReviewStatuses.firstIndex(where: { $0.userId == status.userId && $0.month == status.month && $0.year == status.year }) {
+            monthlyReviewStatuses[index] = status
+        } else {
+            monthlyReviewStatuses.append(status)
+        }
+        saveToLocalStorage()
+    }
+    
+    func completeMonthlyReview(for userId: UUID, month: Int, year: Int) {
+        var status = getMonthlyReviewStatus(for: userId, month: month, year: year) ?? MonthlyReviewStatus(userId: userId, month: month, year: year)
+        status.isCompleted = true
+        status.completedAt = Date()
+        saveMonthlyReviewStatus(status)
+        
+        // Remove related action items
+        actionItems.removeAll { $0.type == .monthlyFinanceReview && $0.userId == userId }
+        saveToLocalStorage()
+    }
+    
+    func shouldShowMonthlyReviewReminder(for userId: UUID, month: Int, year: Int) -> Bool {
+        // Check if review already completed
+        if let status = getMonthlyReviewStatus(for: userId, month: month, year: year), status.isCompleted {
+            return false
+        }
+        
+        let calendar = Calendar.current
+        let now = Date()
+        let currentMonth = calendar.component(.month, from: now)
+        let currentYear = calendar.component(.year, from: now)
+        let currentDay = calendar.component(.day, from: now)
+        
+        // If reviewing current month
+        if month == currentMonth && year == currentYear {
+            // Get last day of current month
+            guard let lastDayDate = calendar.date(from: DateComponents(year: year, month: month + 1, day: 0)) else {
+                return false
+            }
+            let lastDay = calendar.component(.day, from: lastDayDate)
+            
+            // Calculate days until end of month
+            let daysUntilEnd = lastDay - currentDay
+            
+            // Show reminder ONLY on specific days: 7, 3, or 0 days before end
+            return daysUntilEnd == 7 || daysUntilEnd == 3 || daysUntilEnd == 0
+        }
+        
+        // If reviewing previous month (carryover if not completed)
+        if (month == currentMonth - 1 && year == currentYear) ||
+           (month == 12 && currentMonth == 1 && year == currentYear - 1) {
+            // Show persistent reminder for previous month if not completed
+            return true
+        }
+        
+        return false
+    }
+    
+    func reconcileAccountsForReview(userId: UUID, accountBalances: [UUID: Double]) {
+        for (accountId, actualBalance) in accountBalances {
+            guard let account = getAccount(by: accountId) else { continue }
+            
+            let difference = actualBalance - account.balance
+            guard abs(difference) > 0.01 else { continue } // Skip tiny differences
+            
+            // Create reconciliation adjustment
+            let expense = Expense(
+                userId: userId,
+                amount: abs(difference),
+                date: Date(),
+                description: "Monthly Review Reconciliation",
+                categoryName: "Reconciliation",
+                accountId: accountId,
+                isSubscription: false
+            )
+            expenses.append(expense)
+            
+            // Update account balance to match actual
+            if let index = accounts.firstIndex(where: { $0.id == accountId }) {
+                accounts[index].balance = actualBalance
+            }
+        }
         saveToLocalStorage()
     }
     
@@ -672,11 +955,14 @@ class DataService: ObservableObject {
         saveData(balancesOwed, forKey: "balancesOwed")
         saveData(repayments, forKey: "repayments")
         saveData(transfers, forKey: "transfers")
+        saveData(scheduledTransfers, forKey: "scheduledTransfers")
         saveData(savingsBudgets, forKey: "savingsBudgets")
         saveData(salaryIncomes, forKey: "salaryIncomes")
         saveData(incomeTransactions, forKey: "incomeTransactions")
         saveData(actionItems, forKey: "actionItems")
         saveData(friendIOUs, forKey: "friendIOUs")
+        saveData(monthlyReviewStatuses, forKey: "monthlyReviewStatuses")
+        UserDefaults.standard.set(currencyCode, forKey: "currencyCode")
     }
     
     private func loadLocalData() {
@@ -688,11 +974,14 @@ class DataService: ObservableObject {
         balancesOwed = loadData(forKey: "balancesOwed") ?? []
         repayments = loadData(forKey: "repayments") ?? []
         transfers = loadData(forKey: "transfers") ?? []
+        scheduledTransfers = loadData(forKey: "scheduledTransfers") ?? []
         savingsBudgets = loadData(forKey: "savingsBudgets") ?? []
         salaryIncomes = loadData(forKey: "salaryIncomes") ?? []
         incomeTransactions = loadData(forKey: "incomeTransactions") ?? []
         actionItems = loadData(forKey: "actionItems") ?? []
         friendIOUs = loadData(forKey: "friendIOUs") ?? []
+        monthlyReviewStatuses = loadData(forKey: "monthlyReviewStatuses") ?? []
+        currencyCode = UserDefaults.standard.string(forKey: "currencyCode") ?? (Locale.current.currency?.identifier ?? "USD")
     }
     
     private func saveData<T: Codable>(_ data: T, forKey key: String) {

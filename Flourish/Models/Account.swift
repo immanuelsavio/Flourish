@@ -13,7 +13,7 @@ enum AccountType: String, Codable, CaseIterable {
     case creditCard = "Credit Card"
 }
 
-struct Account: Identifiable, Codable {
+struct Account: Identifiable, Codable, Hashable {
     var id: UUID
     var userId: UUID
     var name: String
