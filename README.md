@@ -1,6 +1,8 @@
 # Flourish Finance App
 
-![Flourish Logo](flourish-logo.png)
+<p align="center">
+   <img src="Assets.xcassets/AppIcon.appiconset/1024.png" alt="Flourish Logo" width="128" height="128" />
+</p>
 
 A comprehensive personal finance management application built with SwiftUI for iOS, designed to help users track expenses, manage budgets, handle split payments, and maintain financial health with intuitive visualizations and smart insights.
 
