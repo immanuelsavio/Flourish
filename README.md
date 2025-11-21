@@ -1,7 +1,7 @@
 
 
 <div align="center">
-   <img src="Assets.xcassets/AppIcon.appiconset/1024.png" alt="Flourish Logo" width="128" height="128" />
+   <img src="AppIcons/flourish_3d_readme.png" alt="Flourish Logo" width="128" height="128" />
    <br />
    <h1 style="font-size:3rem;font-weight:900;margin:0;">Flourish</h1>
 </div>
